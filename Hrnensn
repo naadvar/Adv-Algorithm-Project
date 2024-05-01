@@ -7,7 +7,7 @@ data = {
     'Date': ['2024-04-01', '2024-04-02', '2024-04-03'],
     'Job Level': [[3.5, 2.5, 'NaN'], [2.0, 3.0, 4.0], [4.5, 3.8, 2.8]],
     'Organization': [['Marketing', 'Engineering', 'Marketing'], ['HR', 'Engineering', 'Marketing'], ['Engineering', 'Marketing', 'HR']],
-    'Employee ID': [[101, 102, 103], [104, 105, 106], [107, 108, 109]]
+    'Employee ID': [[101, 102, float('nan')], [104, 105, 106], [107, 108, 109]]
 }
 
 # Create a pandas DataFrame
@@ -19,6 +19,8 @@ def find_highest_job_level(row):
     for job_level, organization in zip(row['Job Level'], row['Organization']):
         if isinstance(job_level, float):
             highest_levels[organization] = max(highest_levels[organization], job_level)
+        elif isinstance(job_level, str) and job_level.lower() == 'nan':
+            highest_levels[organization] = max(highest_levels[organization], float('nan'))
     return pd.Series(highest_levels)
 
 # Apply the function to each row of the DataFrame
@@ -29,6 +31,9 @@ def count_most_senior(row):
     meeting_id = row['Meeting ID']
     date = row['Date']
     job_levels = row['Job Level']
+    employee_ids = row['Employee ID']
+    if pd.isna(job_levels).any() or pd.isna(employee_ids).any():  # Check if any NaN values exist in the Job Level or Employee ID columns
+        return
     for organization, employee_ids, highest_levels in zip(row['Organization'], row['Employee ID'], highest_job_levels_per_meeting.iloc[meeting_id - 1]):
         for job_level, employee_id in zip(job_levels, employee_ids):
             if isinstance(job_level, float) and job_level == highest_levels.get(organization, 0):  # Compare with 0 if organization not found
