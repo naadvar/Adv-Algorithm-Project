@@ -1,0 +1,55 @@
+import pandas as pd
+from collections import defaultdict
+
+# Example DataFrame with columns 'Meeting ID', 'Date', 'Job Level', 'Organization', and 'Employee ID'
+data = {
+    'Meeting ID': [1, 2, 3],
+    'Date': ['2024-04-01', '2024-04-02', '2024-04-03'],
+    'Job Level': [[3.5, 2.5, 'NaN'], [2.0, 3.0, 4.0], [4.5, 3.8, 2.8]],
+    'Organization': [['Marketing', 'Engineering', 'Marketing'], ['HR', 'Engineering', 'Marketing'], ['Engineering', 'Marketing', 'HR']],
+    'Employee ID': [[101, 102, 103], [104, 105, 106], [107, 108, 109]]
+}
+
+# Create a pandas DataFrame
+df = pd.DataFrame(data)
+
+# Function to find the highest job level within each organization for each meeting
+def find_highest_job_level(row):
+    highest_levels = defaultdict(float)
+    for job_level, organization in zip(row['Job Level'], row['Organization']):
+        if job_level != 'NaN':
+            highest_levels[organization] = max(highest_levels[organization], float(job_level))
+    return pd.Series(highest_levels)
+
+# Apply the function to each row of the DataFrame
+highest_job_levels_per_meeting = df.apply(find_highest_job_level, axis=1).fillna('NaN')
+
+# Function to count the most senior persons in each meeting for each date
+def count_most_senior(row):
+    meeting_id = row['Meeting ID']
+    date = row['Date']
+    job_levels = row['Job Level']
+    for organization, employee_ids, highest_levels in zip(row['Organization'], row['Employee ID'], highest_job_levels_per_meeting.iloc[meeting_id - 1]):
+        for job_level, employee_id in zip(job_levels, employee_ids):
+            if job_level != 'NaN' and job_level == highest_levels[organization]:
+                yield (employee_id, meeting_id, date)
+
+# Create a generator of most senior persons
+most_senior_persons = count_most_senior(df)
+
+# Dictionary to store the count of each employee being the most senior and the ratio
+employee_seniority_stats = defaultdict(lambda: {'total_count': 0, 'total_meetings': 0})
+
+# Iterate over the generator to calculate counts and ratios
+for employee_id, meeting_id, date in most_senior_persons:
+    employee_seniority_stats[employee_id]['total_count'] += 1
+    employee_seniority_stats[employee_id]['total_meetings'] += 1
+
+# Print the count of each employee being the most senior within his organization for each meeting ID and date
+for employee_id, stats in employee_seniority_stats.items():
+    total_meetings = stats['total_meetings']
+    ratio = stats['total_count'] / total_meetings if total_meetings > 0 else 0
+    print(f"Employee ID: {employee_id}")
+    print(f"Total count of being the most senior: {stats['total_count']}")
+    print(f"Total meetings attended: {total_meetings}")
+    print(f"Overall ratio: {ratio:.2f}\n")
