@@ -1,40 +1,55 @@
-from collections import defaultdict
+import pandas as pd
 
-# Sample data as lists of lists
-job_levels = [[3.0, 2.0, 4.0, 1.0, 3.0],
-              [float('nan'), 1.0, 3.0, 2.0, 4.0],
-              [2.0, 3.0, 1.0, 4.0, 3.0]]
-organizations = [['Marketing', 'Finance', 'HR', 'IT', 'Marketing'],
-                 ['HR', 'Marketing', 'Finance', 'IT', 'HR'],
-                 ['Finance', 'HR', 'Marketing', 'IT', 'Finance']]
-employee_ids = [['EMP001', 'EMP002', 'EMP003', 'EMP004', 'EMP005'],
-                ['EMP006', 'EMP007', 'EMP008', 'EMP009', 'EMP010'],
-                ['EMP011', 'EMP012', 'EMP013', 'EMP014', 'EMP015']]
-meeting_ids = [1, 1, 2, 2, 3]
-meeting_dates = ['2024-04-28', '2024-04-28', '2024-04-29', '2024-04-29', '2024-04-30']
+# Sample data as a pandas DataFrame
+data = {
+    'Job Level': [[3.0, 2.0, 4.0, 1.0, 3.0],
+                  [float('nan'), 1.0, 3.0, 2.0, 4.0],
+                  [2.0, 3.0, 1.0, 4.0, 3.0]],
+    'Organization': [['Marketing', 'Finance', 'HR', 'IT', 'Marketing'],
+                     ['HR', 'Marketing', 'Finance', 'IT', 'HR'],
+                     ['Finance', 'HR', 'Marketing', 'IT', 'Finance']],
+    'Employee ID': [['EMP001', 'EMP002', 'EMP003', 'EMP004', 'EMP005'],
+                    ['EMP006', 'EMP007', 'EMP008', 'EMP009', 'EMP010'],
+                    ['EMP011', 'EMP012', 'EMP013', 'EMP014', 'EMP015']],
+    'Meeting ID': [1, 1, 2, 2, 3],
+    'Meeting Date': ['2024-04-28', '2024-04-28', '2024-04-29', '2024-04-29', '2024-04-30']
+}
+
+df = pd.DataFrame(data)
 
 # Function to count the number of times each person was the most senior member in his organization for each meeting ID and date
-def count_most_senior_in_organization(job_levels, organizations, employee_ids, meeting_ids, meeting_dates):
-    senior_count_by_meeting = defaultdict(lambda: defaultdict(int))
-    senior_count_overall = defaultdict(int)
-    total_meetings_attended = defaultdict(int)
-    max_levels = defaultdict(lambda: defaultdict(float))
+def count_most_senior_in_organization(df):
+    senior_count_by_meeting = {}
+    senior_count_overall = {}
+    total_meetings_attended = {}
+    max_levels = {}
     
-    for job_level, organization, emp_id, meeting_id, meeting_date in zip(job_levels, organizations, employee_ids, meeting_ids, meeting_dates):
-        for level, org, emp in zip(job_level, organization, emp_id):
-            total_meetings_attended[emp] += 1
-            if level > max_levels[(meeting_id, meeting_date)][org]:
+    for idx, row in df.iterrows():
+        job_levels = row['Job Level']
+        organizations = row['Organization']
+        employee_ids = row['Employee ID']
+        meeting_id = row['Meeting ID']
+        meeting_date = row['Meeting Date']
+        
+        for level, org, emp in zip(job_levels, organizations, employee_ids):
+            total_meetings_attended[emp] = total_meetings_attended.get(emp, 0) + 1
+            
+            if (meeting_id, meeting_date) not in max_levels:
+                max_levels[(meeting_id, meeting_date)] = {}
+                senior_count_by_meeting[(meeting_id, meeting_date)] = defaultdict(int)
+                
+            if org not in max_levels[(meeting_id, meeting_date)] or level > max_levels[(meeting_id, meeting_date)][org]:
                 max_levels[(meeting_id, meeting_date)][org] = level
                 senior_count_by_meeting[(meeting_id, meeting_date)][emp] = 1
-                senior_count_overall[emp] += 1
+                senior_count_overall[emp] = senior_count_overall.get(emp, 0) + 1
             elif level == max_levels[(meeting_id, meeting_date)][org]:
                 senior_count_by_meeting[(meeting_id, meeting_date)][emp] += 1
-                senior_count_overall[emp] += 1
+                senior_count_overall[emp] = senior_count_overall.get(emp, 0) + 1
                 
     return senior_count_by_meeting, senior_count_overall, total_meetings_attended
 
 # Count the number of times each person was the most senior member in his organization for each meeting ID and date, overall, and total meetings attended
-senior_count_by_meeting, senior_count_overall, total_meetings_attended = count_most_senior_in_organization(job_levels, organizations, employee_ids, meeting_ids, meeting_dates)
+senior_count_by_meeting, senior_count_overall, total_meetings_attended = count_most_senior_in_organization(df)
 
 # Print the counts for each meeting ID and date
 print("Senior count by meeting ID and date:")
