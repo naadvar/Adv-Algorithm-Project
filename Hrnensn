@@ -18,16 +18,16 @@ def count_most_senior_in_organization(job_levels, organizations, employee_ids, m
     senior_count_by_meeting = defaultdict(lambda: defaultdict(int))
     senior_count_overall = defaultdict(int)
     total_meetings_attended = defaultdict(int)
+    max_levels = defaultdict(lambda: defaultdict(float))
     
     for job_level, organization, emp_id, meeting_id, meeting_date in zip(job_levels, organizations, employee_ids, meeting_ids, meeting_dates):
-        max_levels = defaultdict(float)
-        for level, org, emp in zip(job_level, organization, emp_id):
-            if level > max_levels[org]:
-                max_levels[org] = level
-                
         for level, org, emp in zip(job_level, organization, emp_id):
             total_meetings_attended[emp] += 1
-            if level == max_levels[org]:
+            if level > max_levels[(meeting_id, meeting_date)][org]:
+                max_levels[(meeting_id, meeting_date)][org] = level
+                senior_count_by_meeting[(meeting_id, meeting_date)][emp] = 1
+                senior_count_overall[emp] += 1
+            elif level == max_levels[(meeting_id, meeting_date)][org]:
                 senior_count_by_meeting[(meeting_id, meeting_date)][emp] += 1
                 senior_count_overall[emp] += 1
                 
