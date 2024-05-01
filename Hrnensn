@@ -31,7 +31,7 @@ def count_most_senior(row):
     job_levels = row['Job Level']
     for organization, employee_ids, highest_levels in zip(row['Organization'], row['Employee ID'], highest_job_levels_per_meeting.iloc[meeting_id - 1]):
         for job_level, employee_id in zip(job_levels, employee_ids):
-            if job_level != 'NaN' and job_level == highest_levels[organization]:
+            if job_level != 'NaN' and job_level == highest_levels.get(organization, 0):  # Compare with 0 if organization not found
                 yield (employee_id, meeting_id, date)
 
 # Create a generator of most senior persons
