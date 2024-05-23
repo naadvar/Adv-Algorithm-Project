@@ -71,3 +71,47 @@ print("\nRatio of being the most senior member in the organization to total meet
 for emp in senior_count_overall.keys():
     ratio = senior_count_overall[emp] / total_meetings_attended[emp]
     print(f"Employee ID: {emp}, Ratio: {ratio:.2f}")
+import pandas as pd
+
+# Load the data into a DataFrame
+df = pd.read_csv('employee_performance.csv')
+
+# Convert end_of_month_date to datetime
+df['end_of_month_date'] = pd.to_datetime(df['end_of_month_date'])
+
+# Sort the DataFrame by employee_id and end_of_month_date
+df = df.sort_values(by=['employee_id', 'end_of_month_date'])
+
+# Create a new column to indicate if the performance was 'Below Strong'
+df['below_strong'] = df['performance_category'].apply(lambda x: 1 if x == 'Below Strong' else 0)
+
+# Define a function to calculate the rolling count of below strong ratings in the past N days
+def rolling_below_strong_count(df, days):
+    return df.groupby('employee_id').apply(
+        lambda x: x.set_index('end_of_month_date')['below_strong']
+                   .rolling(f'{days}D').sum().reset_index(drop=True)
+    ).reset_index(drop=True)
+
+# Calculate the rolling count for the past 6 months (approx. 180 days) and 12 months (approx. 365 days)
+df['below_strong_last_6_months'] = rolling_below_strong_count(df, 180)
+df['below_strong_last_12_months'] = rolling_below_strong_count(df, 365)
+
+# Function to calculate the months since first 'Below Strong' rating
+def months_since_first_below_strong(df):
+    first_below_strong_dates = df[df['below_strong'] == 1].groupby('employee_id')['end_of_month_date'].min()
+    df = df.merge(first_below_strong_dates.rename('first_below_strong_date'), on='employee_id', how='left')
+    df['months_since_first_below_strong'] = df.apply(
+        lambda row: (row['end_of_month_date'] - row['first_below_strong_date']).days // 30 
+                    if pd.notnull(row['first_below_strong_date']) else None,
+        axis=1
+    )
+    return df
+
+# Apply the function to calculate months since first 'Below Strong' rating
+df = months_since_first_below_strong(df)
+
+# Drop the temporary columns used for calculations
+df.drop(columns=['below_strong', 'first_below_strong_date'], inplace=True)
+
+# Display the resulting DataFrame
+print(df)
