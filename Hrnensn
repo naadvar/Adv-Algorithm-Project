@@ -169,3 +169,57 @@ plt.show()
 print(f"Mean attritions over 6 months: {np.mean(results):.2f}")
 print(f"Standard deviation of attritions: {np.std(results):.2f}")
 print(f"95% confidence interval: {np.percentile(results, [2.5, 97.5])}")
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+def simulate_attrition(attrition_prob, num_employees, num_months=6):
+    """Simulate attrition for a group of employees over a specified number of months."""
+    # Create an array to store the attrition status for each employee for each month
+    attrition_status = np.zeros((num_employees, num_months))
+    
+    for employee in range(num_employees):
+        for month in range(num_months):
+            # Determine if the employee attrits this month
+            if np.random.rand() < attrition_prob:
+                attrition_status[employee, month] = 1
+                break  # Once an employee attrits, stop checking further months
+
+    return attrition_status
+
+def monte_carlo_simulation(attrition_prob, num_employees, num_simulations=1000, num_months=6):
+    """Run Monte Carlo simulations to model employee attrition."""
+    simulation_results = []
+
+    for _ in range(num_simulations):
+        attrition_status = simulate_attrition(attrition_prob, num_employees, num_months)
+        total_attritions = np.sum(np.any(attrition_status, axis=1))
+        simulation_results.append(total_attritions)
+
+    return simulation_results
+
+# Parameters
+attrition_prob = 0.05  # Example attrition probability
+num_employees = 100  # Number of employees in each simulation
+num_simulations = 1000  # Number of simulations to run
+num_months = 6  # Number of months to simulate
+
+# Run Monte Carlo simulation
+results = monte_carlo_simulation(attrition_prob, num_employees, num_simulations, num_months)
+
+# Analyze and plot the results
+plt.hist(results, bins=30, edgecolor='k', alpha=0.7)
+plt.xlabel('Number of Employees Attriting At Least Once Over 6 Months')
+plt.ylabel('Frequency')
+plt.title('Monte Carlo Simulation of Employee Attrition')
+plt.show()
+
+# Calculate summary statistics
+mean_attrition = np.mean(results)
+std_attrition = np.std(results)
+confidence_interval = np.percentile(results, [2.5, 97.5])
+
+print(f"Mean number of employees attriting at least once: {mean_attrition:.2f}")
+print(f"Standard deviation of attritions: {std_attrition:.2f}")
+print(f"95% confidence interval: {confidence_interval}")
