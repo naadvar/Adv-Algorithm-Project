@@ -115,3 +115,57 @@ df.drop(columns=['below_strong', 'first_below_strong_date'], inplace=True)
 
 # Display the resulting DataFrame
 print(df)
+
+
+def simulate_employee_attrition(employee_id, attrition_risk, num_months=6):
+    """Simulate whether an employee attrits each month."""
+    attrition_status = []
+    for month in range(num_months):
+        if np.random.rand() < attrition_risk:
+            attrition_status.append(True)
+        else:
+            attrition_status.append(False)
+    return attrition_status
+
+# Apply simulation to each employee
+df['Monthly_Attrition'] = df.apply(lambda row: simulate_employee_attrition(row['Employee_ID'], row['Attrition_Risk']), axis=1)
+
+# View results
+print(df[['Employee_ID', 'Attrition_Risk', 'Monthly_Attrition']].head())
+
+
+def simulate_group_attrition(df, num_simulations=1000):
+    num_employees = len(df)
+    num_months = 6
+    results = []
+
+    for _ in range(num_simulations):
+        total_attritions = 0
+        for index, row in df.iterrows():
+            attrition_risk = row['Attrition_Risk']
+            attrition_occurred = False
+            for month in range(num_months):
+                if np.random.rand() < attrition_risk:
+                    attrition_occurred = True
+                    break
+            if attrition_occurred:
+                total_attritions += 1
+        results.append(total_attritions)
+
+    return results
+
+# Run group attrition simulation
+results = simulate_group_attrition(df)
+
+# Analyze results
+import matplotlib.pyplot as plt
+
+plt.hist(results, bins=30, edgecolor='k', alpha=0.7)
+plt.xlabel('Number of Employees Attriting At Least Once Over 6 Months')
+plt.ylabel('Frequency')
+plt.title('Monte Carlo Simulation of Employee Attrition (Group Level)')
+plt.show()
+
+print(f"Mean attritions over 6 months: {np.mean(results):.2f}")
+print(f"Standard deviation of attritions: {np.std(results):.2f}")
+print(f"95% confidence interval: {np.percentile(results, [2.5, 97.5])}")
