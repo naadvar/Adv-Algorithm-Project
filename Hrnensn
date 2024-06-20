@@ -222,4 +222,83 @@ confidence_interval = np.percentile(results, [2.5, 97.5])
 
 print(f"Mean number of employees attriting at least once: {mean_attrition:.2f}")
 print(f"Standard deviation of attritions: {std_attrition:.2f}")
-print(f"95% confidence interval: {confidence_interval}")
+print(f"95% confidence interval: {confidence
+
+
+_interval}")
+
+
+
+import dask.dataframe as dd
+import numpy as np
+
+# Assuming 'data' is initially a Pandas DataFrame, first convert it to a Dask DataFrame
+data = dd.from_pandas(data, npartitions=4)
+
+# Perform renaming and type conversion
+data = data.rename(columns={"snap_dt": "mstr_dt"})
+data["mstr_dt"] = dd.to_datetime(data["mstr_dt"]).astype('datetime64[ns]')
+data["year"] = data["mstr_dt"].dt.year
+data["month"] = data["mstr_dt"].dt.month
+data["performance"] = data["performance"].fillna(0)
+data["promo_int"] = data["promo_int"].fillna(0)
+
+# Remove duplicates and reset index
+data = data.drop_duplicates(subset=["mstr_dt", "emp_id"]).reset_index(drop=True)
+
+# Add sinusoidal transformation of the month
+data["data_anch"] = np.sin(7 * data["performance"])
+
+# Sort values
+data = data.sort_values(["emp_id", "mstr_dt"])
+
+# Create performance dictionary
+perf_dict = {1: "Below Strong", 2: "Strong", 3: "Above Strong"}
+
+# Map performance values
+data["performance_values"] = data["performance"].map(perf_dict)
+
+# Calculate differences
+data["performance_values_diff"] = data.groupby("emp_id")["performance_values"].diff(6)
+data["mom_performance_change"] = data.groupby("emp_id")["performance_values"].diff(6).fillna(0)
+
+# Fill NaNs with 0 for differences
+data["mom_performance_change_inc"] = np.where(data["mom_performance_change"] > 0, 1, 0)
+data["mom_performance_change_dec"] = np.where(data["mom_performance_change"] < 0, 1, 0)
+
+# Calculate performance changes over rolling window
+data["perf_increase_count_18_months"] = (
+    data.sort_values(["emp_id", "mstr_dt"])
+    .groupby("emp_id")["mom_performance_change_inc"]
+    .rolling(12, min_periods=1)
+    .sum()
+    .reset_index(level=0, drop=True)
+)
+
+data["perf_decrease_count_18_months"] = (
+    data.sort_values(["emp_id", "mstr_dt"])
+    .groupby("emp_id")["mom_performance_change_dec"]
+    .rolling(12, min_periods=1)
+    .sum()
+    .reset_index(level=0, drop=True)
+)
+
+# Convert performance categories to integers and calculate cumulative sums
+data["performance_category_strong_int"] = (data.performance == "Strong").astype(int)
+data["performance_category_strong_cumsum"] = (
+    data.groupby("emp_id")["performance_category_strong_int"]
+    .cumsum()
+    .fillna(0)
+    .reset_index(drop=True)
+)
+
+data["performance_category_below_strong_int"] = (data.performance == "Below Strong").astype(int)
+data["performance_category_below_strong_cumsum"] = (
+    data.groupby("emp_id")["performance_category_below_strong_int"]
+    .cumsum()
+    .fillna(0)
+    .reset_index(drop=True)
+)
+
+# Remember to compute the final results if needed
+data = data.compute()
