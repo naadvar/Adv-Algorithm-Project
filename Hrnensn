@@ -686,6 +686,61 @@ data = data.compute()
 
 print(data.head())
 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Example data setup
+data = {
+    'Employee_ID': [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3],
+    'Date': ['2024-01-01', '2024-02-01', '2024-03-01', '2024-04-01', '2024-05-01', '2024-06-01'] * 3,
+    'Probability': [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03]
+}
+
+df = pd.DataFrame(data)
+
+def simulate_employee_attrition(probabilities):
+    """Simulate whether an employee attrits over 6 months based on their monthly probabilities."""
+    for prob in probabilities:
+        if np.random.rand() < prob:
+            return 1  # Employee attrited
+    return 0  # Employee did not attrit
+
+def monte_carlo_simulation(df, num_simulations=1000):
+    """Run Monte Carlo simulations for all employees."""
+    results = []
+
+    # Group by Employee_ID and collect their monthly probabilities
+    grouped = df.groupby('Employee_ID')['Probability'].apply(list)
+
+    for _ in range(num_simulations):
+        total_attritions = 0
+        for probabilities in grouped:
+            total_attritions += simulate_employee_attrition(probabilities)
+        results.append(total_attritions)
+
+    return results
+
+# Run the simulation
+results = monte_carlo_simulation(df)
+
+# Analyze and plot the results
+plt.hist(results, bins=30, edgecolor='k', alpha=0.7)
+plt.xlabel('Number of Employees Attriting At Least Once Over 6 Months')
+plt.ylabel('Frequency')
+plt.title('Monte Carlo Simulation of Employee Attrition')
+plt.show()
+
+# Calculate summary statistics
+mean_attrition = np.mean(results)
+std_attrition = np.std(results)
+confidence_interval = np.percentile(results, [2.5, 97.5])
+
+print(f"Mean number of employees attriting at least once: {mean_attrition:.2f}")
+print(f"Standard deviation of attritions: {std_attrition:.2f}")
+print(f"95% confidence interval: {confidence_interval}")
+
+
 
 
 
