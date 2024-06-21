@@ -740,7 +740,43 @@ print(f"Mean number of employees attriting at least once: {mean_attrition:.2f}")
 print(f"Standard deviation of attritions: {std_attrition:.2f}")
 print(f"95% confidence interval: {confidence_interval}")
 
+import pandas as pd
+import numpy as np
 
+# Example data setup
+data = {
+    'Employee_ID': [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3],
+    'Date': ['2024-01-01', '2024-02-01', '2024-03-01', '2024-04-01', '2024-05-01', '2024-06-01'] * 3,
+    'Probability': [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03]
+}
+
+df = pd.DataFrame(data)
+
+def simulate_monthly_attrition(probability, num_simulations=1000):
+    """Simulate whether an employee attrits in a given month across multiple simulations."""
+    attrition_simulations = []
+    for _ in range(num_simulations):
+        attrition_simulations.append(int(np.random.rand() < probability))
+    return attrition_simulations
+
+def monte_carlo_simulation(df, num_simulations=1000):
+    """Run Monte Carlo simulations and store the results for each employee and each month."""
+    results = []
+    
+    for employee_id, group in df.groupby('Employee_ID'):
+        employee_results = {'Employee_ID': employee_id}
+        for index, row in group.iterrows():
+            attrition_simulations = simulate_monthly_attrition(row['Probability'], num_simulations)
+            employee_results[row['Date']] = attrition_simulations
+        results.append(employee_results)
+    
+    return results
+
+# Run the simulation
+results = monte_carlo_simulation(df)
+
+# Display the results for the first employee
+print(f"Results for Employee 1:\n{results[0]}")
 
 
 
