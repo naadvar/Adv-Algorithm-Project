@@ -778,5 +778,27 @@ results = monte_carlo_simulation(df)
 # Display the results for the first employee
 print(f"Results for Employee 1:\n{results[0]}")
 
+def simulate_employee_attrition(probabilities, num_simulations=1000):
+    """Simulate whether an employee attrits each month across multiple simulations."""
+    simulation_results = {month: [] for month in range(len(probabilities))}
+    for _ in range(num_simulations):
+        for month, prob in enumerate(probabilities):
+            simulation_results[month].append(int(np.random.rand() < prob))
+    return simulation_results
 
+def monte_carlo_simulation(df, num_simulations=1000):
+    """Run Monte Carlo simulations and store the results for each employee and each month."""
+    results = []
+
+    # Group by Employee_ID and collect their monthly probabilities
+    grouped = df.groupby('Employee_ID')['Probability'].apply(list)
+
+    for employee_id, probabilities in grouped.items():
+        employee_results = {'Employee_ID': employee_id}
+        simulation_results = simulate_employee_attrition(probabilities, num_simulations)
+        for month, month_results in simulation_results.items():
+            employee_results[f'Month_{month+1}'] = month_results
+        results.append(employee_results)
+
+    return results
 
