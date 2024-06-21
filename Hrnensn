@@ -540,5 +540,152 @@ data["performance"] = data.map_partitions(
 data = data.compute()
 
 
+import dask.dataframe as dd
+import numpy as np
+import pandas as pd
+from scipy.stats import mode
+
+# Example DataFrame creation for illustration purposes
+data = pd.DataFrame({
+    'snap_dt': pd.date_range('2023-01-01', periods=100, freq='M'),
+    'emp_id': np.random.randint(1, 10, size=100),
+    'performance': np.random.randint(1, 4, size=100),
+    'promo_int': np.random.randint(0, 2, size=100)
+})
+
+# Convert the Pandas DataFrame to a Dask DataFrame
+data = dd.from_pandas(data, npartitions=4)
+
+# Perform renaming and type conversion
+data = data.rename(columns={"snap_dt": "mstr_dt"})
+data["mstr_dt"] = dd.to_datetime(data["mstr_dt"]).astype('datetime64[ns]')
+data["year"] = data["mstr_dt"].dt.year
+data["month"] = data["mstr_dt"].dt.month
+data["performance"] = data["performance"].fillna(0)
+data["promo_int"] = data["promo_int"].fillna(0)
+
+# Remove duplicates and reset index
+data = data.drop_duplicates(subset=["mstr_dt", "emp_id"]).reset_index(drop=True)
+
+# Add sinusoidal transformation of the month
+data["data_anch"] = np.sin(7 * data["performance"])
+
+# Sort values
+data = data.sort_values(["emp_id", "mstr_dt"])
+
+# Performance dictionary
+perf_dict = {1: "Below Strong", 2: "Strong", 3: "Above Strong"}
+tel = {v: k for k, vs in perf_dict.items() for v in vs}
+
+# Map performance values
+data["performance_values"] = data["performance"].map(tel)
+
+# Helper function to calculate diff within each group
+def calculate_diff(df):
+    df["perf_values_diff"] = df["performance_values"].diff(6)
+    return df
+
+# Apply the diff calculation
+meta = data.head(0)
+meta["perf_values_diff"] = np.float64()  # Define metadata for new column
+
+data = data.groupby("emp_id").apply(calculate_diff, meta=meta).reset_index(drop=True)
+
+# Calculate mom_performance_change
+def calculate_mom_performance_change(df):
+    return np.where(
+        df["perf_values_diff"].isnull(),
+        np.nan,
+        np.where(df["perf_values_diff"] == 0, 0, np.where(df["perf_values_diff"] > 0, 1, -1))
+    )
+
+data["mom_performance_change"] = dd.map_partitions(
+    lambda df: pd.Series(calculate_mom_performance_change(df), index=df.index),
+    meta=pd.Series(dtype='float64')
+)
+
+# Fill NaNs for the diff
+data["mom_performance_change_inc"] = dd.map_partitions(
+    lambda df: pd.Series(np.where(df["mom_performance_change"] > 0, 1, np.nan), index=df.index),
+    meta=pd.Series(dtype='float64')
+)
+
+data["mom_performance_change_dec"] = dd.map_partitions(
+    lambda df: pd.Series(np.where(df["mom_performance_change"] < 0, 1, np.nan), index=df.index),
+    meta=pd.Series(dtype='float64')
+)
+
+# Calculate performance changes over rolling window
+def calculate_rolling_sum(df, col_name):
+    df[col_name + "_rolling_sum"] = (
+        df.sort_values(["emp_id", "mstr_dt"])
+        .groupby("emp_id")[col_name]
+        .rolling(12, min_periods=1)
+        .sum()
+        .reset_index(level=0, drop=True)
+    )
+    return df
+
+meta = data.head(0)
+meta["mom_performance_change_inc_rolling_sum"] = np.float64()
+meta["mom_performance_change_dec_rolling_sum"] = np.float64()
+
+data = data.map_partitions(calculate_rolling_sum, col_name="mom_performance_change_inc", meta=meta)
+data = data.map_partitions(calculate_rolling_sum, col_name="mom_performance_change_dec", meta=meta)
+
+# Convert performance categories to integers and calculate cumulative sums
+data["performance_category_strong_int"] = (data.performance == "Strong").astype(int)
+
+data["performance_category_strong_cumsum"] = (
+    data.groupby("emp_id")["performance_category_strong_int"]
+    .cumsum()
+    .fillna(0)
+    .reset_index(drop=True)
+)
+
+data["performance_category_below_strong_int"] = (data.performance == "Below Strong").astype(int)
+
+data["performance_category_below_strong_cumsum"] = (
+    data.groupby("emp_id")["performance_category_below_strong_int"]
+    .cumsum()
+    .fillna(0)
+    .reset_index(drop=True)
+)
+
+# Update performance based on month condition using Dask's map_partitions
+data["performance"] = data.map_partitions(
+    lambda df: df.assign(performance=np.where(df.month.isin([7, 1]), df["performance"], np.nan)),
+    meta=data._meta
+)
+
+# Function to calculate the rolling mode
+def rolling_mode(arr, window):
+    """Calculate the rolling mode of a 1D array."""
+    result = np.full(arr.shape, np.nan)
+    for i in range(len(arr)):
+        if i >= window - 1:
+            result[i] = mode(arr[i - window + 1:i + 1]).mode[0]
+    return result
+
+# Apply rolling mode function to the partitioned dataframe
+def calculate_rolling_mode(df, col_name, window):
+    df[col_name + "_rolling_mode"] = (
+        df.sort_values(["emp_id", "mstr_dt"])
+        .groupby("emp_id")[col_name]
+        .transform(lambda x: rolling_mode(x.to_numpy(), window))
+    )
+    return df
+
+meta = data.head(0)
+meta["performance_rolling_mode"] = np.float64()
+
+data = data.map_partitions(calculate_rolling_mode, col_name="performance", window=12, meta=meta)
+
+# Remember to compute the final results if needed
+data = data.compute()
+
+print(data.head())
+
+
 
 
