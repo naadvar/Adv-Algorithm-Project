@@ -1035,3 +1035,7 @@ data["11_month_rolling_mode_perf"] = data.groupby("emp_id")["performance_values_
 # If saving to disk, make sure to use an efficient format like Parquet or HDF5
 
 
+def rolling_mode(series):
+    return series.rolling(window=window_size_11).apply(lambda x: pd.Series.mode(x)[0], raw=False)
+
+data["11_month_rolling_mode_perf"] = data.set_index('mstr_dt').groupby("emp_id")["performance_values_ff"].apply(rolling_mode).reset_index(level=0, drop=True).reset_index(drop=True)
