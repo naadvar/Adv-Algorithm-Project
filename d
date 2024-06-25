@@ -351,3 +351,15 @@ def rolling_mode(arr, window):
     return result
 
 data['18_month_rolling_mode_perf'] = rolling_mode(data['performance_values_ff'].values, 18)
+
+    from scipy.stats import mode
+
+# Define a custom rolling mode function using scipy.stats.mode
+def rolling_mode(series):
+    mode_values = mode(series, axis=None)
+    return mode_values.mode[0] if mode_values.count[0] > 0 else np.nan
+
+# Apply the custom rolling mode function
+data["11_month_rolling_mode_perf"] = data.groupby("emp_id")["performance_values_ff"].transform(
+    lambda x: x.rolling(window=11, min_periods=1).apply(rolling_mode)
+)
