@@ -84,3 +84,9 @@ data["11_month_rolling_mode_perf"] = data.groupby("emp_id")["performance_values_
 
 # Compute all at once to optimize
 data = data.compute()
+
+    -----------------
+
+
+
+    Not all divisions are known. Can't align partitions. Please use set index 
