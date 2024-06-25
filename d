@@ -343,4 +343,11 @@ data["11_month_rolling_mode_perf"] = data.groupby("emp_id")["performance_values_
 
 # Compute all at once to optimize
 data = data.compute()
+def rolling_mode(arr, window):
+    result = np.empty(len(arr))
+    result[:] = np.nan
+    for i in range(window, len(arr) + 1):
+        result[i - 1] = pd.Series(arr[i - window:i]).mode()[0]
+    return result
 
+data['18_month_rolling_mode_perf'] = rolling_mode(data['performance_values_ff'].values, 18)
