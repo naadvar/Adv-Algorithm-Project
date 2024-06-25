@@ -1039,3 +1039,12 @@ def rolling_mode(series):
     return series.rolling(window=window_size_11).apply(lambda x: pd.Series.mode(x)[0], raw=False)
 
 data["11_month_rolling_mode_perf"] = data.set_index('mstr_dt').groupby("emp_id")["performance_values_ff"].apply(rolling_mode).reset_index(level=0, drop=True).reset_index(drop=True)
+
+window_size_11 = 330
+
+# Calculate the 11-month rolling mode for performance
+def rolling_mode(series, window):
+    result = series.rolling(window=window, min_periods=1).apply(lambda x: pd.Series.mode(x)[0] if len(pd.Series.mode(x)) > 0 else np.nan, raw=False)
+    return result
+
+data["11_month_rolling_mode_perf"] = data.set_index('mstr_dt').groupby("emp_id")["performance_values_ff"].apply(lambda x: rolling_mode(x, window_size_11)).reset_index(level=0, drop=True).reset_index(drop=True)
