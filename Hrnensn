@@ -1048,3 +1048,11 @@ def rolling_mode(series, window):
     return result
 
 data["11_month_rolling_mode_perf"] = data.set_index('mstr_dt').groupby("emp_id")["performance_values_ff"].apply(lambda x: rolling_mode(x, window_size_11)).reset_index(level=0, drop=True).reset_index(drop=True)
+
+def rolling_mode(series, window):
+    return series.rolling(window=window).apply(lambda x: pd.Series.mode(x)[0] if len(pd.Series.mode(x)) > 0 else np.nan, raw=False)
+
+# Calculate the 11-month rolling mode performance using Dask
+window_size_11 = 330  # Approximate 11 months as 330 days
+
+data["11_month_rolling_mode_perf"] = data.set_index("mstr_dt").groupby("emp_id")["performance_values_ff"].apply(rolling_mode, window=window_size_11, meta=('x', 'f8')).reset_index(level=0, drop=True)
