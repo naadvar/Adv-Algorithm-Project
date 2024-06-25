@@ -41,12 +41,13 @@ data["mom_performance_change"] = data["perf_values_diff"].map_partitions(
 data["mom_performance_change_inc"] = data["mom_performance_change"].map_partitions(lambda df: np.where(df > 0, 1, 0), meta=('x', 'f8'))
 data["mom_performance_change_dec"] = data["mom_performance_change"].map_partitions(lambda df: np.where(df < 0, 1, 0), meta=('x', 'f8'))
 
-# Set the index to mstr_dt for time-based rolling operations
+# Set the index to mstr_dt for time-based rolling operations and repartition
 data = data.set_index('mstr_dt')
+data = data.repartition(freq='M')
 
 # Rolling calculations (with time-based index)
-data["perf_increase_count_18_months"] = data.groupby("emp_id")["mom_performance_change_inc"].rolling('18M').sum().reset_index(0, drop=True)
-data["perf_decrease_count_18_months"] = data.groupby("emp_id")["mom_performance_change_dec"].rolling('18M').sum().reset_index(0, drop=True)
+data["perf_increase_count_18_months"] = data.groupby("emp_id")["mom_performance_change_inc"].rolling('548D').sum().reset_index(drop=True)
+data["perf_decrease_count_18_months"] = data.groupby("emp_id")["mom_performance_change_dec"].rolling('548D').sum().reset_index(drop=True)
 
 # Reset index to default
 data = data.reset_index()
@@ -79,7 +80,7 @@ data["fraction_of_below_strong_from_start"] = data.map_partitions(
 
 data["performance_values_ff"] = data["performance_values"].ffill()
 
-data["11_month_rolling_mode_perf"] = data.groupby("emp_id")["performance_values_ff"].rolling('11M').apply(lambda x: pd.Series.mode(x)[0], raw=True).reset_index(0, drop=True)
+data["11_month_rolling_mode_perf"] = data.groupby("emp_id")["performance_values_ff"].rolling('11M').apply(lambda x: pd.Series.mode(x)[0], raw=True).reset_index(drop=True)
 
 # Compute all at once to optimize
 data = data.compute()
