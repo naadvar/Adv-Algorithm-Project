@@ -1,3 +1,32 @@
+
+import pandas as pd
+import numpy as np
+
+# Parameters
+num_employees = 10  # Number of employees
+months = pd.date_range(start='2024-07-31', periods=6, freq='M')  # Next 6 end-of-month dates
+
+# Generate employee IDs
+employee_ids = [f'EMP{str(i).zfill(4)}' for i in range(1, num_employees + 1)]
+
+# Function to generate probabilities
+def generate_probabilities(num_months):
+    probs = np.random.rand(num_months)
+    return probs / probs.sum()
+
+# Generate data
+data = []
+for emp_id in employee_ids:
+    probs = generate_probabilities(len(months))
+    for month, prob in zip(months, probs):
+        data.append({'Employee ID': emp_id, 'Date': month, 'Attrition Probability': prob})
+
+# Create DataFrame
+df = pd.DataFrame(data)
+
+# Display DataFrame
+print(df)
+
 import pandas as pd
 
 # Sample DataFrames with mixed data types
