@@ -362,4 +362,74 @@ def rolling_mode(series):
 # Apply the custom rolling mode function
 data["11_month_rolling_mode_perf"] = data.groupby("emp_id")["performance_values_ff"].transform(
     lambda x: x.rolling(window=11, min_periods=1).apply(rolling_mode)
+
+
+    
 )
+
+
+    import pandas as pd
+import numpy as np
+from scipy.stats import mode
+
+class AttritionRiskTransformer(BaseTransformer):
+    def perform_custom_calculations(self):
+        """
+        Converts attrition risk description into a mode of the last 3 months.
+        
+        Returns:
+            pd.DataFrame: A dataframe containing the following columns:
+                - emp_id
+                - attrn_risk_desc
+                - attrn_risk_factor
+                - attrn_risk_mode_3_months
+        """
+        # Extract and fill missing data
+        data = (
+            self.extractor.mapping.get('AttritionRiskExtractor')
+            .extract_data()
+            .fillna("Not Available")
+        )
+
+        # Convert all columns to lowercase
+        data.columns = [x.lower() for x in data.columns]
+
+        # Convert date columns to datetime
+        data['mstr_dt'] = pd.to_datetime(data['mstr_dt'])
+
+        # Ensure attrition risk factor is categorical
+        data['attrn_risk_factor'] = data['attrn_risk_desc'].astype('category').cat.codes
+
+        # Calculate the mode of attrition risk factor over a 3-month rolling window
+        data['attrn_risk_mode_3_months'] = self.rolling_mode(data['attrn_risk_factor'], window=3)
+
+        # Map attrition risk modes to descriptive values
+        attrn_dict = {0: "High", 1: "Low", 2: "Medium", 3: "Not Available"}
+        data['attrn_risk_mode_3_months'] = data['attrn_risk_mode_3_months'].map(attrn_dict)
+
+        return data
+
+    @staticmethod
+    def rolling_mode(series, window):
+        """
+        Compute the rolling mode of a Pandas Series.
+        
+        Args:
+            series (pd.Series): The series to compute the rolling mode on.
+            window (int): The window size for computing the rolling mode.
+        
+        Returns:
+            pd.Series: A series containing the rolling mode.
+        """
+        # Create a padded array for rolling window
+        padded_series = np.pad(series, (window - 1, 0), mode='constant', constant_values=np.nan)
+        shape = (series.size, window)
+        strides = padded_series.strides[0]
+
+        rolling_matrix = np.lib.stride_tricks.as_strided(padded_series, shape=shape, strides=(strides, strides))
+        mode_result, _ = mode(rolling_matrix, axis=1, nan_policy='omit')
+
+        return pd.Series(mode_result.flatten(), index=series.index).fillna(3)  # Fill NaNs with 'Not Available' code
+
+class AttritionTeamTransformer(BaseTransformer):
+    pass
