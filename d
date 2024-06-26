@@ -432,4 +432,80 @@ class AttritionRiskTransformer(BaseTransformer):
         return pd.Series(mode_result.flatten(), index=series.index).fillna(3)  # Fill NaNs with 'Not Available' code
 
 class AttritionTeamTransformer(BaseTransformer):
+
+
+
+
+
+
+                import pandas as pd
+import numpy as np
+from scipy.stats import mode
+
+class AttritionRiskTransformer(BaseTransformer):
+    def perform_custom_calculations(self):
+        """
+        Converts attrition risk description into a mode of the last 3 months.
+        
+        Returns:
+            pd.DataFrame: A dataframe containing the following columns:
+                - emp_id
+                - mstr_dt
+                - attrn_risk_desc
+                - attrn_risk_factor
+                - attrn_risk_mode_3_months
+        """
+        # Extract and fill missing data
+        data = (
+            self.extractor.mapping.get('AttritionRiskExtractor')
+            .extract_data()
+            .fillna("Not Available")
+        )
+
+        # Convert all columns to lowercase
+        data.columns = [x.lower() for x in data.columns]
+
+        # Rename columns for consistency
+        data = data.rename(columns={"snap_dt": "mstr_dt"})
+
+        # Convert date columns to datetime
+        data['mstr_dt'] = pd.to_datetime(data['mstr_dt'])
+
+        # Ensure attrition risk factor is categorical
+        data['attrn_risk_factor'] = data['attrn_risk_desc'].astype('category').cat.codes
+
+        # Calculate the mode of attrition risk factor over a 3-month rolling window
+        data['attrn_risk_mode_3_months'] = self.rolling_mode(data['attrn_risk_factor'].values, window=3)
+
+        # Map attrition risk modes to descriptive values
+        attrn_dict = {0: "High", 1: "Low", 2: "Medium", 3: "Not Available"}
+        data['attrn_risk_mode_3_months'] = data['attrn_risk_mode_3_months'].map(attrn_dict)
+
+        return data
+
+    @staticmethod
+    def rolling_mode(arr, window):
+        """
+        Compute the rolling mode of a numpy array.
+        
+        Args:
+            arr (np.ndarray): The array to compute the rolling mode on.
+            window (int): The window size for computing the rolling mode.
+        
+        Returns:
+            np.ndarray: An array containing the rolling mode.
+        """
+        if len(arr) < window:
+            return np.full(len(arr), 3)  # If there are fewer elements than the window size, return 'Not Available' code
+
+        result = np.full(len(arr), 3)  # Default to 'Not Available' code
+        for i in range(window - 1, len(arr)):
+            window_slice = arr[i - window + 1:i + 1]
+            most_common = mode(window_slice).mode[0]
+            result[i] = most_common
+
+        return result
+
+class AttritionTeamTransformer(BaseTransformer):
+    pass
     pass
