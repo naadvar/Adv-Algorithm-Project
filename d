@@ -16,6 +16,104 @@ df = pd.DataFrame(data)
 
 def simulate_employee_attrition(probabilities, num_simulations=1000):
     """Simulate whether an employee attrits each month across multiple simulations."""
+    probabilities = np.array(probabilities)
+    simulations = np.random.rand(num_simulations, len(probabilities)) < probabilities
+    return simulations
+
+def monte_carlo_simulation(df, num_simulations=1000):
+    """Run Monte Carlo simulations and store the results for each employee and each month."""
+    results = []
+
+    # Group by Employee_ID and collect their monthly probabilities
+    grouped = df.groupby('Employee_ID')['Probability'].apply(list)
+
+    for employee_id, probabilities in grouped.items():
+        simulation_results = simulate_employee_attrition(probabilities, num_simulations)
+        results.append({
+            'Employee_ID': employee_id,
+            'Simulations': simulation_results
+        })
+
+    return results
+
+def aggregate_simulation_results_by_manager(results, df, manager_level, num_simulations=1000):
+    """Aggregate simulation results by the specified manager level."""
+    manager_groups = df.groupby(manager_level)['Employee_ID'].unique()
+    aggregated_results = {}
+
+    for manager, employees in manager_groups.items():
+        total_attritions = np.zeros(num_simulations)
+        for employee in employees:
+            employee_simulations = next(emp['Simulations'] for emp in results if emp['Employee_ID'] == employee)
+            total_attritions += employee_simulations.sum(axis=1)
+        aggregated_results[manager] = total_attritions
+
+    return aggregated_results
+
+def compute_bounds(aggregated_results, percentile_lower=2.5, percentile_upper=97.5):
+    """Compute the lower and upper bounds for the aggregated simulation results."""
+    bounds = {}
+    for manager, attritions in aggregated_results.items():
+        lower_bound = np.percentile(attritions, percentile_lower)
+        upper_bound = np.percentile(attritions, percentile_upper)
+        bounds[manager] = (lower_bound, upper_bound)
+    return bounds
+
+# Run the simulation
+results = monte_carlo_simulation(df)
+
+# Aggregate results by each manager level
+aggregated_ec_1 = aggregate_simulation_results_by_manager(results, df, 'ec_1')
+aggregated_ec_2 = aggregate_simulation_results_by_manager(results, df, 'ec_2')
+aggregated_ec_3 = aggregate_simulation_results_by_manager(results, df, 'ec_3')
+
+# Compute bounds for each manager level
+bounds_ec_1 = compute_bounds(aggregated_ec_1)
+bounds_ec_2 = compute_bounds(aggregated_ec_2)
+bounds_ec_3 = compute_bounds(aggregated_ec_3)
+
+# Display the bounds for each manager level
+print("Bounds for ec_1 managers:")
+for manager, (lower, upper) in bounds_ec_1.items():
+    print(f"Manager {manager}: Lower Bound = {lower}, Upper Bound = {upper}")
+
+print("\nBounds for ec_2 managers:")
+for manager, (lower, upper) in bounds_ec_2.items():
+    print(f"Manager {manager}: Lower Bound = {lower}, Upper Bound = {upper}")
+
+print("\nBounds for ec_3 managers:")
+for manager, (lower, upper) in bounds_ec_3.items():
+    print(f"Manager {manager}: Lower Bound = {lower}, Upper Bound = {upper}")
+
+# Plot results for one manager level as an example (ec_1)
+manager_to_plot = list(aggregated_ec_1.keys())[0]  # Plot for the first manager in ec_1
+plt.hist(aggregated_ec_1[manager_to_plot], bins=30, edgecolor='k', alpha=0.7)
+plt.xlabel('Total Attritions')
+plt.ylabel('Frequency')
+plt.title(f'Monte Carlo Simulation of Total Employee Attrition for Manager {manager_to_plot}')
+plt.axvline(bounds_ec_1[manager_to_plot][0], color='r', linestyle='dashed', linewidth=1)
+plt.axvline(bounds_ec_1[manager_to_plot][1], color='r', linestyle='dashed', linewidth=1)
+plt.show()
+
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Example data setup including manager levels
+data = {
+    'Employee_ID': [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3],
+    'Date': ['2024-01-01', '2024-02-01', '2024-03-01', '2024-04-01', '2024-05-01', '2024-06-01'] * 3,
+    'Probability': [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03],
+    'ec_1': ['A', 'A', 'A', 'A', 'A', 'A', 'B', 'B', 'B', 'B', 'B', 'B', 'C', 'C', 'C', 'C', 'C', 'C'],
+    'ec_2': ['X', 'X', 'X', 'X', 'X', 'X', 'Y', 'Y', 'Y', 'Y', 'Y', 'Y', 'Z', 'Z', 'Z', 'Z', 'Z', 'Z'],
+    'ec_3': ['P', 'P', 'P', 'P', 'P', 'P', 'Q', 'Q', 'Q', 'Q', 'Q', 'Q', 'R', 'R', 'R', 'R', 'R', 'R']
+}
+
+df = pd.DataFrame(data)
+
+def simulate_employee_attrition(probabilities, num_simulations=1000):
+    """Simulate whether an employee attrits each month across multiple simulations."""
     simulation_results = {month: [] for month in range(len(probabilities))}
     for _ in range(num_simulations):
         for month, prob in enumerate(probabilities):
