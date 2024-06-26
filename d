@@ -1,3 +1,81 @@
+import pandas as pd
+
+# Sample DataFrames with mixed data types
+df1 = pd.DataFrame({
+    'employee_id': [1, 2, 3, 4],
+    'start_date': ['2022-01-01', '2022-02-01', '2022-03-01', '2022-04-01'],
+    'end_date': ['2022-01-31', '2022-02-28', '2022-03-31', '2022-04-30'],
+    'feature1': ['10', '20', '30', 'forty'],  # Mix of numeric and string values
+    'feature2': ['100', '200', 'three hundred', '400']  # Mix of numeric and string values
+})
+
+df2 = pd.DataFrame({
+    'employee_id': [1, 2, 3, 4],
+    'start_date': ['2022-01-01', '2022-02-01', '2022-03-01', '2022-04-01'],
+    'end_date': ['2022-01-31', '2022-02-28', '2022-03-31', '2022-04-30'],
+    'feature1': ['10', '21', '30', 'forty'],  # Notice the differences for employee 2
+    'feature2': ['100', '200', '300', '400']  # Notice the differences for employee 3
+})
+
+# Convert date columns to datetime format
+df1['start_date'] = pd.to_datetime(df1['start_date'])
+df1['end_date'] = pd.to_datetime(df1['end_date'])
+df2['start_date'] = pd.to_datetime(df2['start_date'])
+df2['end_date'] = pd.to_datetime(df2['end_date'])
+
+# Merge the DataFrames on keys
+merged_df = pd.merge(df1, df2, on=['employee_id', 'start_date', 'end_date'], suffixes=('_df1', '_df2'))
+
+# Initialize dictionaries to store mismatch counts and statistics
+mismatch_summary = {}
+statistics = {}
+
+# Compare the features
+for feature in ['feature1', 'feature2']:
+    if merged_df[f'{feature}_df1'].dtype == 'object' or merged_df[f'{feature}_df2'].dtype == 'object':
+        # Handle string comparisons
+        merged_df[f'{feature}_match'] = merged_df[f'{feature}_df1'] == merged_df[f'{feature}_df2']
+        diff_values = merged_df[~merged_df[f'{feature}_match']]
+    else:
+        # Handle numeric comparisons
+        merged_df[f'{feature}_df1'] = pd.to_numeric(merged_df[f'{feature}_df1'], errors='coerce')
+        merged_df[f'{feature}_df2'] = pd.to_numeric(merged_df[f'{feature}_df2'], errors='coerce')
+        merged_df[f'{feature}_match'] = merged_df[f'{feature}_df1'] == merged_df[f'{feature}_df2']
+        merged_df[f'{feature}_diff'] = merged_df[f'{feature}_df1'] - merged_df[f'{feature}_df2']
+        diff_values = merged_df[~merged_df[f'{feature}_match']][f'{feature}_diff']
+    
+    # Count mismatches
+    mismatch_summary[feature] = merged_df[~merged_df[f'{feature}_match']]['employee_id'].count()
+    
+    # Calculate statistics if numeric
+    if merged_df[f'{feature}_df1'].dtype in ['int64', 'float64'] and merged_df[f'{feature}_df2'].dtype in ['int64', 'float64']:
+        statistics[feature] = {
+            'mean_diff': diff_values.mean(),
+            'std_diff': diff_values.std(),
+            'min_diff': diff_values.min(),
+            'max_diff': diff_values.max(),
+            'total_diff': diff_values.sum()
+        }
+    else:
+        statistics[feature] = {
+            'mean_diff': None,
+            'std_diff': None,
+            'min_diff': None,
+            'max_diff': None,
+            'total_diff': None
+        }
+
+# Display the mismatch summary
+print("Mismatch Summary:")
+print(mismatch_summary)
+
+# Display the statistics
+print("\nStatistics:")
+print(statistics)
+
+
+
+
 import dask.dataframe as dd
 import numpy as np
 import pandas as pd
