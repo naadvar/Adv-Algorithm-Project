@@ -507,5 +507,18 @@ class AttritionRiskTransformer(BaseTransformer):
         return result
 
 class AttritionTeamTransformer(BaseTransformer):
+
+
+
+                import pandas as pd
+
+def rename_and_drop_duplicates(df):
+    cols = pd.Series(df.columns)
+    for dup in cols[cols.duplicated()].unique():
+        cols[cols[cols == dup].index.values.tolist()] = [dup + '_x' if i == 0 else dup + '_y' for i in range(sum(cols == dup))]
+    df.columns = cols
+    y_cols = [col for col in df.columns if col.endswith('_y')]
+    df.drop(columns=y_cols, inplace=True)
+    return df
     pass
     pass
