@@ -1,4 +1,70 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
+# Example data setup
+data = {
+    'Employee_ID': [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3],
+    'Date': ['2024-01-01', '2024-02-01', '2024-03-01', '2024-04-01', '2024-05-01', '2024-06-01'] * 3,
+    'Probability': [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03]
+}
+
+df = pd.DataFrame(data)
+
+def simulate_employee_attrition(probabilities, num_simulations=1000):
+    """Simulate whether an employee attrits each month across multiple simulations."""
+    simulation_results = {month: [] for month in range(len(probabilities))}
+    for _ in range(num_simulations):
+        for month, prob in enumerate(probabilities):
+            simulation_results[month].append(int(np.random.rand() < prob))
+    return simulation_results
+
+def monte_carlo_simulation(df, num_simulations=1000):
+    """Run Monte Carlo simulations and store the results for each employee and each month."""
+    results = []
+
+    # Group by Employee_ID and collect their monthly probabilities
+    grouped = df.groupby('Employee_ID')['Probability'].apply(list)
+
+    for employee_id, probabilities in grouped.items():
+        employee_results = {'Employee_ID': employee_id}
+        simulation_results = simulate_employee_attrition(probabilities, num_simulations)
+        for month, month_results in simulation_results.items():
+            employee_results[f'Month_{month+1}'] = month_results
+        results.append(employee_results)
+
+    return results
+
+# Run the simulation
+results = monte_carlo_simulation(df)
+
+# Aggregate simulation results
+total_attritions = []
+for simulation_idx in range(1000):  # Assuming 1000 simulations
+    total_attrition = 0
+    for employee in results:
+        for month in range(6):  # Assuming 6 months
+            total_attrition += employee[f'Month_{month+1}'][simulation_idx]
+    total_attritions.append(total_attrition)
+
+# Compute summary statistics
+lower_bound = np.percentile(total_attritions, 2.5)
+upper_bound = np.percentile(total_attritions, 97.5)
+mean_attrition = np.mean(total_attritions)
+std_attrition = np.std(total_attritions)
+
+print(f"Mean total attrition: {mean_attrition:.2f}")
+print(f"Standard deviation of total attrition: {std_attrition:.2f}")
+print(f"95% confidence interval: ({lower_bound}, {upper_bound})")
+
+# Plot histogram of total attritions
+plt.hist(total_attritions, bins=30, edgecolor='k', alpha=0.7)
+plt.xlabel('Total Attritions Over 6 Months')
+plt.ylabel('Frequency')
+plt.title('Monte Carlo Simulation of Total Employee Attrition')
+plt.axvline(lower_bound, color='r', linestyle='dashed', linewidth=1)
+plt.axvline(upper_bound, color='r', linestyle='dashed', linewidth=1)
+plt.show()
 import pandas as pd
 import numpy as np
 
