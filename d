@@ -59,6 +59,117 @@ def aggregate_simulation_results_by_month(results, df, manager_level, num_simula
 
     return aggregated_results
 
+def compute_monthly_bounds_by_manager(aggregated_results, percentile_lower=2.5, percentile_upper=97.5):
+    """Compute the lower and upper bounds for each manager's aggregated simulation results by month."""
+    bounds = {}
+    for month, managers in aggregated_results.items():
+        bounds[month] = {}
+        for manager, attritions in managers.items():
+            lower_bound = np.percentile(attritions, percentile_lower)
+            upper_bound = np.percentile(attritions, percentile_upper)
+            bounds[month][manager] = (lower_bound, upper_bound)
+    return bounds
+
+# Run the simulation
+num_simulations = 1000
+results = monte_carlo_simulation(df, num_simulations)
+
+# Aggregate results by each manager level and month
+aggregated_ec_1 = aggregate_simulation_results_by_month(results, df, 'ec_1', num_simulations)
+aggregated_ec_2 = aggregate_simulation_results_by_month(results, df, 'ec_2', num_simulations)
+aggregated_ec_3 = aggregate_simulation_results_by_month(results, df, 'ec_3', num_simulations)
+
+# Compute monthly bounds for each manager level
+monthly_bounds_ec_1 = compute_monthly_bounds_by_manager(aggregated_ec_1)
+monthly_bounds_ec_2 = compute_monthly_bounds_by_manager(aggregated_ec_2)
+monthly_bounds_ec_3 = compute_monthly_bounds_by_manager(aggregated_ec_3)
+
+# Display the monthly bounds for each manager level
+def display_monthly_bounds(bounds, manager_level):
+    print(f"Monthly Bounds for {manager_level} managers:")
+    for month, managers in bounds.items():
+        print(f"\nMonth: {month}")
+        for manager, (lower, upper) in managers.items():
+            print(f"Manager {manager}: Lower Bound = {lower}, Upper Bound = {upper}")
+
+display_monthly_bounds(monthly_bounds_ec_1, 'ec_1')
+display_monthly_bounds(monthly_bounds_ec_2, 'ec_2')
+display_monthly_bounds(monthly_bounds_ec_3, 'ec_3')
+
+# Plot results for one manager level and one month as an example (ec_1, January)
+month_to_plot = '2024-01'
+manager_to_plot = list(aggregated_ec_1[month_to_plot].keys())[0]  # Plot for the first manager in ec_1 for January
+plt.hist(aggregated_ec_1[month_to_plot][manager_to_plot], bins=30, edgecolor='k', alpha=0.7)
+plt.xlabel('Total Attritions')
+plt.ylabel('Frequency')
+plt.title(f'Monte Carlo Simulation of Total Employee Attrition for Manager {manager_to_plot} in {month_to_plot}')
+plt.axvline(monthly_bounds_ec_1[month_to_plot][manager_to_plot][0], color='r', linestyle='dashed', linewidth=1)
+plt.axvline(monthly_bounds_ec_1[month_to_plot][manager_to_plot][1], color='r', linestyle='dashed', linewidth=1)
+plt.show()
+
+
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Example data setup including manager levels
+data = {
+    'Employee_ID': [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3],
+    'Date': ['2024-01-01', '2024-02-01', '2024-03-01', '2024-04-01', '2024-05-01', '2024-06-01'] * 3,
+    'Probability': [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03],
+    'ec_1': ['A', 'A', 'A', 'A', 'A', 'A', 'B', 'B', 'B', 'B', 'B', 'B', 'C', 'C', 'C', 'C', 'C', 'C'],
+    'ec_2': ['X', 'X', 'X', 'X', 'X', 'X', 'Y', 'Y', 'Y', 'Y', 'Y', 'Y', 'Z', 'Z', 'Z', 'Z', 'Z', 'Z'],
+    'ec_3': ['P', 'P', 'P', 'P', 'P', 'P', 'Q', 'Q', 'Q', 'Q', 'Q', 'Q', 'R', 'R', 'R', 'R', 'R', 'R']
+}
+
+df = pd.DataFrame(data)
+
+# Ensure dates are in datetime format
+df['Date'] = pd.to_datetime(df['Date'])
+
+def simulate_employee_attrition(probabilities, num_simulations=1000):
+    """Simulate whether an employee attrits each month across multiple simulations."""
+    probabilities = np.array(probabilities)
+    simulations = np.random.rand(num_simulations, len(probabilities)) < probabilities
+    return simulations
+
+def monte_carlo_simulation(df, num_simulations=1000):
+    """Run Monte Carlo simulations and store the results for each employee and each month."""
+    results = []
+
+    # Group by Employee_ID and collect their monthly probabilities
+    grouped = df.groupby('Employee_ID')['Probability'].apply(list)
+
+    for employee_id, probabilities in grouped.items():
+        simulation_results = simulate_employee_attrition(probabilities, num_simulations)
+        results.append({
+            'Employee_ID': employee_id,
+            'Simulations': simulation_results
+        })
+
+    return results
+
+def aggregate_simulation_results_by_month(results, df, manager_level, num_simulations=1000):
+    """Aggregate simulation results by the specified manager level and month."""
+    manager_groups = df.groupby(manager_level)
+    months = df['Date'].dt.to_period('M').unique()
+    aggregated_results = {month: {} for month in months}
+
+    for month in months:
+        monthly_df = df[df['Date'].dt.to_period('M') == month]
+        manager_monthly_groups = monthly_df.groupby(manager_level)['Employee_ID'].unique()
+
+        for manager, employees in manager_monthly_groups.items():
+            if manager not in aggregated_results[month]:
+                aggregated_results[month][manager] = np.zeros(num_simulations)
+
+            for employee in employees:
+                employee_simulations = next(emp['Simulations'] for emp in results if emp['Employee_ID'] == employee)
+                aggregated_results[month][manager] += employee_simulations[:, months.tolist().index(month)]
+
+    return aggregated_results
+
 def compute_monthly_bounds(aggregated_results, percentile_lower=2.5, percentile_upper=97.5):
     """Compute the lower and upper bounds for the aggregated simulation results by month."""
     bounds = {}
