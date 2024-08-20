@@ -1,0 +1,69 @@
+"""
+A class used to apply a transformation to a DataFrame based on the best columns
+for a specified credit bureau.
+
+Attributes:
+    bureau (str): The credit bureau.
+    keys (List[str]): A list of column names to group by.
+    df (DataFrame): The input DataFrame containing credit data.
+    f (Optional[Callable[[str], Column]]): A callable function used for aggregation.
+"""
+
+
+"""
+Initializes the Apply object with the bureau, keys, DataFrame, and an optional
+aggregation function.
+
+Args:
+    bureau (str): The credit bureau.
+    keys (List[str]): A list of column names to group by.
+    df (DataFrame): The input DataFrame containing credit data.
+    f (Optional[Callable[[str], Column]]): A callable function used for aggregation.
+"""
+
+"""
+Allows the instance to be called as a function to set the aggregation function
+and generate the output DataFrame.
+
+Args:
+    f (Callable[[str], Column]): A callable function used for aggregation.
+
+Returns:
+    DataFrame: The resulting DataFrame after applying the transformation.
+"""
+
+"""
+Retrieves the best columns for the given bureau from the configuration.
+
+Returns:
+    List[str]: A list of the best column names for the bureau.
+"""
+
+"""
+Retrieves the target columns that are part of the best columns for the bureau.
+
+Returns:
+    List[str]: A list of target column names.
+"""
+
+
+"""
+Generates a list of Spark SQL Column expressions for the target columns.
+
+Returns:
+    List[Column]: A list of Column expressions for the target columns.
+"""
+
+"""
+Generates a list of Spark SQL Column expressions for the grouping keys.
+
+Returns:
+    List[Column]: A list of Column expressions for the keys.
+"""
+
+
+"""
+Combines key expressions and target expressions into a single list.
+
+Returns:
+    List[Column]: A list of Column expressions including both​⬤
