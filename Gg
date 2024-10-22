@@ -1,0 +1,71 @@
+import pandas as pd
+import numpy as np
+
+# Simplified function to compute metrics and return a DataFrame in the desired format
+def compute_metrics_simple(df, column, bestie_version, batch_ts, default_values=None):
+    """
+    Computes simplified metrics for the specified column in a pandas DataFrame.
+    
+    :param df: pandas DataFrame to compute metrics on.
+    :param column: The column name to compute metrics for.
+    :param bestie_version: The version of the data for metadata.
+    :param batch_ts: The timestamp for the batch for metadata.
+    :param default_values: List of default values to check for, e.g., ['997', '998', '999'].
+    :return: pandas DataFrame with metrics for the specified column.
+    """
+    
+    if default_values is None:
+        default_values = ['997', '998', '999', '999997', '999998', '999999']
+    
+    total_rows = len(df)
+    col_data = df[column]
+
+    # Metrics to calculate
+    metrics = [
+        ("null_rate", col_data.isnull().mean()),
+        ("zero_rate", (col_data == 0).mean())
+    ]
+    
+    # Calculate default value rates
+    metrics.extend([
+        (f"default_value_{val}_rate", (col_data == val).mean()) for val in default_values
+    ])
+    
+    # Exclude default values for core statistics
+    valid_data = col_data[~col_data.isin(default_values)]
+    core_stats = [
+        ("avg", valid_data.mean()),
+        ("stddev", valid_data.std()),
+        ("min", valid_data.min()),
+        ("max", valid_data.max()),
+        ("count", valid_data.count())
+    ]
+    metrics.extend(core_stats)
+
+    # Create the DataFrame
+    result_df = pd.DataFrame({
+        "bestie_version": bestie_version,
+        "ol_batch_ts": batch_ts,
+        "metric": [m[0] for m in metrics],
+        column: [m[1] for m in metrics]
+    })
+    
+    return result_df
+
+
+# Example usage with the same DataFrame
+data = {
+    'BESTIE_VERSION': [10702]*22,
+    'OL_BATCH_TS': ['2022-08-17 09:00:00']*10 + ['2022-08-17 10:00:00']*12,
+    'EFX_AL_MPATP_1': [0, 100, 500, None, 997, 998, 999, 999997, 999998, -1, 
+                       0, 100, 500, None, 997, 998, 999, 999997, 999998, 999999, -1],
+    'FOO': [0]*22
+}
+
+df = pd.DataFrame(data)
+
+# Compute metrics for 'EFX_AL_MPATP_1'
+result_df = compute_metrics_simple(df, 'EFX_AL_MPATP_1', 10702, '2022-08-17 09:00:00')
+
+# Display the result
+import ace_tools as tools; tools.display_dataframe_to_user(name="Simplified Metrics Results", dataframe=result_df)
