@@ -1,3 +1,45 @@
+WITH data_processed AS (
+    SELECT 
+        -- Replace default values with NULL
+        CASE 
+            WHEN column_name IN (997, 998, 999, 999997, 999998, 999999, 999996) THEN NULL
+            ELSE column_name 
+        END AS processed_column
+    FROM table_name
+),
+valid_data AS (
+    SELECT
+        processed_column
+    FROM data_processed
+    WHERE processed_column IS NOT NULL AND processed_column NOT IN (997, 998, 999, 999997, 999998, 999999, 999996)
+)
+SELECT
+    -- Calculate null rate
+    AVG(CASE WHEN processed_column IS NULL THEN 1 ELSE 0 END) AS null_rate,
+
+    -- Calculate zero rate
+    AVG(CASE WHEN processed_column = 0 THEN 1 ELSE 0 END) AS zero_rate,
+
+    -- Calculate rates for default values
+    AVG(CASE WHEN processed_column = 997 THEN 1 ELSE 0 END) AS default_value_997_rate,
+    AVG(CASE WHEN processed_column = 998 THEN 1 ELSE 0 END) AS default_value_998_rate,
+    AVG(CASE WHEN processed_column = 999 THEN 1 ELSE 0 END) AS default_value_999_rate,
+    AVG(CASE WHEN processed_column = 999997 THEN 1 ELSE 0 END) AS default_value_999997_rate,
+    AVG(CASE WHEN processed_column = 999998 THEN 1 ELSE 0 END) AS default_value_999998_rate,
+    AVG(CASE WHEN processed_column = 999999 THEN 1 ELSE 0 END) AS default_value_999999_rate,
+    AVG(CASE WHEN processed_column = 999996 THEN 1 ELSE 0 END) AS default_value_999996_rate,
+
+    -- Calculate core statistics
+    AVG(processed_column) AS avg,
+    STDDEV(processed_column) AS stddev,
+    MIN(processed_column) AS min,
+    MAX(processed_column) AS max,
+    COUNT(processed_column) AS count
+FROM
+    valid_data;
+
+
+
 import pandas as pd
 import numpy as np
 
