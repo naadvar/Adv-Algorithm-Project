@@ -69,3 +69,48 @@ result_df = compute_metrics_simple(df, 'EFX_AL_MPATP_1', 10702, '2022-08-17 09:0
 
 # Display the result
 import ace_tools as tools; tools.display_dataframe_to_user(name="Simplified Metrics Results", dataframe=result_df)
+
+
+
+import numpy as np
+import pandas as pd
+
+def compute_metrics_simple(df, column, bestie_version, batch_ts, min_val, max_val, default_values=None):
+    if default_values is None:
+        default_values = [997, 998, 999, 999997, 999998, 999999, 999996]
+
+    # Create a copy of the DataFrame and handle default values
+    df2 = df.copy()
+    df2[column] = df2[column].replace(default_values, np.nan)
+    df2[column] = pd.to_numeric(df2[column], errors='coerce')
+
+    # Calculate null and zero rates
+    metrics = [
+        ("null_rate", df2[column].isnull().mean()),
+        ("zero_rate", (df2[column] == 0).mean())
+    ]
+
+    # Fill NaN with a valid number for further calculations
+    col_data = df2[column].fillna(996).astype(int)
+
+    # Extend metrics with default value rates
+    metrics.extend([
+        (f"default_value_{val}_rate", (col_data == val).mean()) for val in default_values
+    ])
+    
+    # Valid data filtering (removing default values)
+    valid_data = col_data[~col_data.isin(default_values)]
+
+    # Core statistics
+    core_stats = {
+        "min": valid_data.min(),
+        "max": valid_data.max(),
+        "mean": valid_data.mean(),
+        "count": len(valid_data)
+    }
+
+    # Extend metrics with core statistics
+    metrics.extend(core_stats.items())
+
+    # Return a DataFrame with all the metrics
+    return pd.DataFrame(metrics, columns=["metric", "value"])
