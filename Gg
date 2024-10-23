@@ -114,3 +114,55 @@ def compute_metrics_simple(df, column, bestie_version, batch_ts, min_val, max_va
 
     # Return a DataFrame with all the metrics
     return pd.DataFrame(metrics, columns=["metric", "value"])
+
+import numpy as np
+import pandas as pd
+
+def compute_metrics_simple(df, column, bestie_version, batch_ts, min_val, max_val, default_values=None):
+    if default_values is None:
+        default_values = [997, 998, 999, 999997, 999998, 999999, 999996]
+
+    df2 = df.copy()
+
+    # Replace the default values with NaN
+    df2[column] = df2[column].replace(default_values, np.nan)
+
+    # Convert column to numeric, coercing any errors to NaN
+    df2[column] = pd.to_numeric(df2[column], errors='coerce')
+
+    # Metrics calculation
+    metrics = []
+
+    # Null rate
+    metrics.append(("null_rate", df2[column].isnull().mean()))
+
+    # Zero rate
+    metrics.append(("zero_rate", (df2[column] == 0).mean()))
+
+    # Fill NaN values with 996 to avoid issues in further numeric computations
+    col_data_filled = df2[column].fillna(996).astype(int)
+
+    # Calculate default value rates
+    for val in default_values:
+        metrics.append((f"default_value_{val}_rate", (col_data_filled == val).mean()))
+
+    # Replace 'None' strings with NaN, and fill remaining NaNs with 996
+    df2[column] = df2[column].replace("None", np.nan)
+    df2[column] = df2[column].fillna(996).astype(int)
+
+    # Calculate statistics for non-default values
+    valid_data = df2[column][~df2[column].isin(default_values)]
+
+    # Core statistics
+    core_stats = {
+        "min": valid_data.min(),
+        "max": valid_data.max(),
+        "mean": valid_data.mean(),
+        "count": len(valid_data)
+    }
+
+    for stat, value in core_stats.items():
+        metrics.append((stat, value))
+
+    # Convert metrics into a DataFrame for easy readability
+    return pd.DataFrame(metrics, columns=["metric", "value"])
