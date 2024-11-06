@@ -53,3 +53,53 @@ def json_to_flat_dataframe(json_data):
 # Example usage
 # Load your JSON data from a file, API, or other source
 # Assuming `json_data` is your complex nested JSON structure (replace with your actual data)
+
+
+from pyspark.sql import functions as F
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("DeeplyNestedFilter").getOrCreate()
+
+# Load the JSON data without imposing schema
+exp = spark.read.option("multiline", "true").json("your_json_path.json")
+
+# Function to recursively flatten the schema
+def flatten_schema(schema, prefix=None):
+    fields = []
+    for field in schema.fields:
+        field_name = f"{prefix}.{field.name}" if prefix else field.name
+        if isinstance(field.dataType, StructType):
+            fields += flatten_schema(field.dataType, prefix=field_name)
+        else:
+            fields.append(field_name)
+    return fields
+
+# Function to flatten a DataFrame based on schema
+def flatten_df(df):
+    flat_cols = flatten_schema(df.schema)
+    flat_df = df
+    for col_name in flat_cols:
+        flat_df = flat_df.withColumn(col_name.replace('.', '_'), F.col(col_name))
+    return flat_df.select([col_name.replace('.', '_') for col_name in flat_cols])
+
+# Flatten the DataFrame
+exp_flat_df = flatten_df(exp)
+
+# Remove columns with value 0
+non_zero_columns = [
+    col for col in exp_flat_df.columns 
+    if exp_flat_df.select(col).where(F.col(col) == 0).count() == 0
+]
+exp_non_zero_df = exp_flat_df.select(*non_zero_columns)
+
+# Cast all columns to StringType
+for col_name in exp_non_zero_df.columns:
+    exp_non_zero_df = exp_non_zero_df.withColumn(col_name, F.col(col_name).cast("string"))
+
+# Re-nest the DataFrame if necessary (keeping the flat structure if it's acceptable)
+# If nesting is needed, you would use complex aggregation, which could be customized based on schema.
+
+# Show the final DataFrame
+exp_non_zero_df.show(truncate=False)
