@@ -1,0 +1,33 @@
+needed
+    }
+}
+
+# Convert the JSON structure to a DataFrame
+df = pd.json_normalize(data)
+
+# Recursive function to flatten deeply nested structures
+def flatten_dict(d, parent_key='', sep='_'):
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        elif isinstance(v, list):
+            for i, item in enumerate(v):
+                if isinstance(item, dict):
+                    items.extend(flatten_dict(item, f"{new_key}_{i}", sep=sep).items())
+                else:
+                    items.append((f"{new_key}_{i}", item))
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+# Apply the flattening function to each row
+flat_data = df.apply(lambda row: flatten_dict(row.to_dict()), axis=1)
+flat_df = pd.DataFrame(flat_data.tolist())
+
+# Convert to key-value pairs
+key_value_df = flat_df.melt(var_name="key", value_name="value")
+
+# Display the key-value pair DataFrame
+print(key_value_df)
