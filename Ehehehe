@@ -1,0 +1,52 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when, lit
+from pyspark.sql.types import StructType, StructField, ArrayType, StringType, IntegerType, FloatType
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("ProcessNestedJSON").getOrCreate()
+
+# Load JSON file into DataFrame
+df = spark.read.json("path/to/your/json_file.json")
+
+# Helper function to check if a column is primitive (string, int, float)
+def is_primitive(data_type):
+    return isinstance(data_type, (StringType, IntegerType, FloatType))
+
+# Recursive function to remove zero-like values at each nested level
+def process_columns(df, schema, prefix=""):
+    columns_to_keep = []
+    removed_keys = []
+
+    for field in schema.fields:
+        col_name = f"{prefix}.{field.name}" if prefix else field.name
+        if isinstance(field.dataType, StructType):
+            # If it's a struct, process it recursively
+            nested_df, nested_removed_keys = process_columns(df.select(f"{col_name}.*"), field.dataType, col_name)
+            removed_keys.extend(nested_removed_keys)
+            columns_to_keep.append(nested_df)
+        elif isinstance(field.dataType, ArrayType) and isinstance(field.dataType.elementType, StructType):
+            # If it's an array of structs, explode and process it
+            exploded_col = f"exploded_{field.name}"
+            df = df.withColumn(exploded_col, explode_outer(col(col_name)))
+            nested_df, nested_removed_keys = process_columns(df.select(f"{exploded_col}.*"), field.dataType.elementType, exploded_col)
+            removed_keys.extend(nested_removed_keys)
+            columns_to_keep.append(nested_df)
+        elif is_primitive(field.dataType):
+            # Apply zero-like filter to primitive fields only
+            zero_condition = (col(col_name) == 0) | (col(col_name) == "0") | col(col_name).isNull() | (col(col_name) == "") | (col(col_name) == "None")
+            columns_to_keep.append(when(zero_condition, lit(None)).otherwise(col(col_name)).alias(field.name))
+            if zero_condition:
+                removed_keys.append(col_name)
+        else:
+            # If not struct/array or primitive, keep the column as-is
+            columns_to_keep.append(col(col_name))
+
+    # Return updated DataFrame with filtered columns and list of removed keys
+    return df.select(columns_to_keep), removed_keys
+
+# Process the DataFrame
+cleaned_df, removed_keys = process_columns(df, df.schema)
+
+# Display final cleaned data and removed keys
+cleaned_df.show(truncate=False)
+print("Removed keys:", removed_keys)
