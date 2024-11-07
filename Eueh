@@ -1,0 +1,42 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lit, expr, from_json, to_json, map_from_entries, explode
+from pyspark.sql.types import MapType, StringType, StructType, StructField
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("ConvertToMapType").getOrCreate()
+
+# Load JSON file into DataFrame
+df = spark.read.json("path/to/your/json_file.json")
+
+# Recursive function to convert all nested structs to MapType
+def struct_to_map(df, schema, prefix=""):
+    for field in schema.fields:
+        field_name = f"{prefix}.{field.name}" if prefix else field.name
+
+        # If the field is a StructType, convert it to a MapType
+        if isinstance(field.dataType, StructType):
+            # Convert struct to JSON string, then parse it back as a map
+            df = df.withColumn(field_name, from_json(to_json(col(field_name)), MapType(StringType(), StringType())))
+            # Recursively handle any nested structs
+            df = struct_to_map(df, field.dataType, field_name)
+        elif isinstance(field.dataType, ArrayType) and isinstance(field.dataType.elementType, StructType):
+            # Handle arrays of structs by exploding, converting, and re-assembling
+            df = df.withColumn(field_name, explode(col(field_name)))
+            df = df.withColumn(field_name, from_json(to_json(col(field_name)), MapType(StringType(), StringType())))
+            df = df.groupBy().agg(expr(f"collect_list({field_name})").alias(field_name))
+    return df
+
+# Apply the struct_to_map function to convert all structs to maps
+map_df = struct_to_map(df, df.schema)
+
+# Function to filter out zero-like values from a MapType column
+def filter_zero_values(map_column):
+    return expr(f"filter({map_column}, (key, value) -> NOT(value IN ('0', '', 'None', NULL) OR value = 0))")
+
+# Apply the filter function to each map column in the DataFrame
+for field in map_df.schema.fields:
+    if isinstance(field.dataType, MapType):
+        map_df = map_df.withColumn(field.name, filter_zero_values(field.name))
+
+# Show the final DataFrame with nested maps and filtered zero-like values
+map_df.show(truncate=False)
