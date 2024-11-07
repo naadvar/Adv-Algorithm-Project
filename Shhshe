@@ -1,0 +1,53 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, explode, when, lit, array, struct
+from pyspark.sql.types import StringType
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("ProcessNestedJSON").getOrCreate()
+
+# Load JSON file into DataFrame
+df = spark.read.json("path/to/your/json_file.json")
+
+# Function to process and filter zero values at each level
+def remove_zero_values(df):
+    # Collect all column names that contain zero-like values
+    columns_to_remove = []
+    for column in df.columns:
+        zero_condition = (col(column) == 0) | (col(column) == "0") | col(column).isNull() | (col(column) == "") | (col(column) == "None")
+        df = df.withColumn(f"{column}_is_zero", when(zero_condition, lit(1)).otherwise(lit(0)))
+        if zero_condition:
+            columns_to_remove.append(column)
+    
+    # Drop columns with zero-like values and retain original structure
+    df_cleaned = df.drop(*columns_to_remove)
+    removed_keys = [col for col in columns_to_remove]
+    
+    return df_cleaned, removed_keys
+
+# Initial processing on root level
+cleaned_df, removed_keys = remove_zero_values(df)
+
+# Recursively process nested structs and arrays if present
+def process_nested(df, removed_keys):
+    # Check each column to see if it's an array or struct
+    for column, dtype in df.dtypes:
+        if "array" in dtype:
+            # Explode arrays to handle them individually
+            df = df.withColumn(column, explode_outer(column))
+        if "struct" in dtype:
+            # Process each field within the struct
+            nested_columns = [f"{column}.{nested_col}" for nested_col in df.select(column + ".*").columns]
+            for nested_column in nested_columns:
+                # Apply the zero-value filtering function on nested columns
+                cleaned_nested_df, nested_removed_keys = remove_zero_values(df.select(nested_column))
+                removed_keys.extend(nested_removed_keys)
+                # Replace original struct with cleaned version
+                df = df.withColumn(column, struct([cleaned_nested_df[col] for col in cleaned_nested_df.columns]))
+    return df, removed_keys
+
+# Process nested structure
+cleaned_df, all_removed_keys = process_nested(cleaned_df, removed_keys)
+
+# Show final cleaned data and removed keys
+cleaned_df.show(truncate=False)
+print("Removed keys:", all_removed_keys)
