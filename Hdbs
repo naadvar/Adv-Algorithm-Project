@@ -1,0 +1,47 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lit, when, array
+from pyspark.sql import DataFrame
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("ProcessJSON").getOrCreate()
+
+# Load JSON file into DataFrame
+df = spark.read.json("path/to/your/json_file.json")
+
+# Helper function to flatten a DataFrame (if needed)
+def flatten_df(nested_df: DataFrame, sep: str = '_') -> DataFrame:
+    flat_cols = []
+    nested_cols = []
+    for column_name, column_type in nested_df.dtypes:
+        if "." in column_name or isinstance(nested_df.schema[column_name].dataType, StructType):
+            nested_cols.append(column_name)
+        else:
+            flat_cols.append(column_name)
+    flat_df = nested_df.select(flat_cols + [col(nested_column).alias(nested_column.replace(".", sep)) for nested_column in nested_cols])
+    while nested_cols:
+        flat_df = flatten_df(flat_df)
+    return flat_df
+
+# Flatten the DataFrame to make it easier to work with nested fields
+flat_df = flatten_df(df)
+
+# List to store columns with zero-like values
+zero_columns = []
+
+# Check for zero-like values in each column
+for column in flat_df.columns:
+    zero_condition = (col(column) == 0) | (col(column) == "0") | col(column).isNull() | (col(column) == "") | (col(column) == "None")
+    flat_df = flat_df.withColumn(f"{column}_is_zero", when(zero_condition, lit(1)).otherwise(lit(0)))
+    zero_columns.append(column)
+
+# Collect all columns with zero-like values
+removed_keys_df = flat_df.select([col for col in zero_columns if col.endswith("_is_zero")])
+
+# Filter out columns with zero values and keep track of removed keys
+cleaned_df = flat_df.drop(*[column for column in zero_columns if column.endswith("_is_zero")])
+
+# Display the removed keys
+removed_keys_df.show(truncate=False)
+
+# Display the cleaned data without zero values
+cleaned_df.show(truncate=False)
