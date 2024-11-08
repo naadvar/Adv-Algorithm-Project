@@ -1,0 +1,38 @@
+from pyspark.sql import functions as F
+from pyspark.sql.types import MapType, StringType, LongType, ArrayType
+
+# Define a new function to filter out keys with a value of 0 and collect removed keys
+def filter_best_attributes(bestAttributes):
+    filtered_attributes = {}
+    removed_keys = []
+    
+    # Iterate through each key-value pair in bestAttributes
+    for key, value in bestAttributes.items():
+        if value != 0:
+            filtered_attributes[key] = value
+        else:
+            removed_keys.append(key)
+    
+    # Return the filtered attributes and removed keys
+    return (filtered_attributes, removed_keys)
+
+# Register the function as a UDF with the appropriate return types
+filter_best_attributes_udf = F.udf(filter_best_attributes, 
+                                   MapType(StringType(), LongType()))
+
+# Apply the function to bestAttributes field
+filtered_df = exp_1.withColumn(
+    'filtered_bestAttributes', 
+    filter_best_attributes_udf(F.col('experianResponse.experianCreditBureau.products.customSolution.bestAttributes'))
+)
+
+# Add a separate column for removed keys
+filtered_df = filtered_df.withColumn(
+    'removed_keys',
+    F.udf(lambda x: [k for k, v in x.items() if v == 0], ArrayType(StringType()))(
+        F.col('experianResponse.experianCreditBureau.products.customSolution.bestAttributes')
+    )
+)
+
+# Show the resulting DataFrame with filtered attributes and removed keys
+filtered_df.select('filtered_bestAttributes', 'removed_keys').show(truncate=False)
