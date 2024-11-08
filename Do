@@ -72,3 +72,46 @@ for path in best_attributes_paths:
 
 # Display paths with zero values in bestAttributes
 print("Paths with zero values in bestAttributes:", zero_value_columns)
+from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, StringType, LongType, ArrayType, MapType
+
+# Define a function to filter out Row objects with value 0 and collect removed keys
+def filter_best_attributes(best_attributes):
+    filtered_attributes = {}
+    removed_keys = []
+    
+    # Check if best_attributes is a list of Rows
+    if isinstance(best_attributes, list):
+        for item in best_attributes:
+            if hasattr(item, "__fields__"):
+                # Assuming each Row has one field with key and value
+                for key in item.__fields__:
+                    value = getattr(item, key)
+                    if value != 0:
+                        filtered_attributes[key] = value
+                    else:
+                        removed_keys.append(key)
+    
+    # Return the filtered attributes and removed keys as a tuple
+    return (filtered_attributes, removed_keys)
+
+# Register the function as a UDF with the appropriate return types
+filter_best_attributes_udf = F.udf(filter_best_attributes, 
+                                   StructType([
+                                       StructField("filtered_attributes", MapType(StringType(), LongType())),
+                                       StructField("removed_keys", ArrayType(StringType()))
+                                   ]))
+
+# Apply the function to the bestAttributes field
+filtered_df = exp_1.withColumn(
+    'result',
+    filter_best_attributes_udf(F.col('experianResponse.experianCreditBureau.products.customSolution.bestAttributes'))
+)
+
+# Extract filtered attributes and removed keys from the result column
+filtered_df = filtered_df.withColumn("filtered_bestAttributes", F.col("result.filtered_attributes")) \
+                         .withColumn("removed_keys", F.col("result.removed_keys")) \
+                         .drop("result")
+
+# Show the resulting DataFrame with filtered attributes and removed keys
+filtered_df.select('filtered_bestAttributes', 'removed_keys').show(truncate=False)
