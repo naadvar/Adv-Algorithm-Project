@@ -1,0 +1,74 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lit, when
+from pyspark.sql.types import StructType, StructField, ArrayType, MapType
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("FindZeroValuesInBestAttributes").getOrCreate()
+
+def get_best_attributes_paths(schema, parent=""):
+    """
+    Recursively find all paths in 'bestAttributes' where we need to check for zero values.
+    """
+    paths = []
+    for field in schema.fields:
+        field_name = f"{parent}.{field.name}" if parent else field.name
+        if field_name.endswith("bestAttributes") and isinstance(field.dataType, StructType):
+            # Only collect fields under 'bestAttributes'
+            paths.extend(get_column_paths(field.dataType, field_name))
+        elif isinstance(field.dataType, StructType):
+            # Recurse into structs
+            paths.extend(get_best_attributes_paths(field.dataType, field_name))
+    return paths
+
+def get_column_paths(schema, parent=""):
+    """
+    Recursively find all scalar fields in a nested StructType.
+    """
+    paths = []
+    for field in schema.fields:
+        field_name = f"{parent}.{field.name}" if parent else field.name
+        if isinstance(field.dataType, StructType):
+            # Recurse into structs
+            paths.extend(get_column_paths(field.dataType, field_name))
+        elif isinstance(field.dataType, ArrayType) and isinstance(field.dataType.elementType, StructType):
+            # Handle arrays of structs by appending array notation
+            paths.extend(get_column_paths(field.dataType.elementType, f"{field_name}"))
+        elif isinstance(field.dataType, (ArrayType, MapType)):
+            # Skip complex nested types not directly filterable (e.g., arrays of arrays or maps)
+            continue
+        else:
+            # For scalar fields, just add the path
+            paths.append(field_name)
+    return paths
+
+# Load your DataFrame
+# df = spark.read.json("path_to_your_json_file.json")
+
+# Get only paths under bestAttributes for zero-value checking
+best_attributes_paths = get_best_attributes_paths(df.schema)
+
+# Now we filter columns where values are 0 and collect those paths
+zero_value_columns = []
+for path in best_attributes_paths:
+    try:
+        # Split the path and use getField for nested fields
+        fields = path.split(".")
+        expr = col(fields[0])
+        for field in fields[1:]:
+            expr = expr.getField(field)
+
+        # Check for zero value
+        zero_condition = when(expr == 0, lit(path)).otherwise(None)
+
+        # Create a new column to check for zero values
+        filtered_df = df.withColumn(path.replace(".", "_") + "_zero", zero_condition)
+        
+        # Collect columns with zero values specifically under bestAttributes
+        if filtered_df.filter(col(path.replace(".", "_") + "_zero").isNotNull()).count() > 0:
+            zero_value_columns.append(path)
+            
+    except Exception as e:
+        print(f"Error processing path {path}: {e}")
+
+# Display paths with zero values in bestAttributes
+print("Paths with zero values in bestAttributes:", zero_value_columns)
