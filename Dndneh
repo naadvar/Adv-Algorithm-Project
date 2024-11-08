@@ -1,0 +1,31 @@
+from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, StringType, LongType, ArrayType, MapType
+
+# Define a function to filter out keys with values of 0, null, or empty strings
+def filter_best_attributes(best_attributes):
+    filtered_attributes = {}
+    
+    # Check if best_attributes is a list of Rows
+    if isinstance(best_attributes, list):
+        for item in best_attributes:
+            if hasattr(item, "__fields__"):
+                # Iterate over each key in the Row
+                for key in item.__fields__:
+                    value = getattr(item, key)
+                    # Keep only keys with non-zero, non-null, and non-empty values
+                    if value not in [0, None, ""]:
+                        filtered_attributes[key] = value
+                        
+    return filtered_attributes
+
+# Register the function as a UDF with the appropriate return type
+filter_best_attributes_udf = F.udf(filter_best_attributes, MapType(StringType(), LongType()))
+
+# Apply the function to modify the original exp_1 DataFrame
+exp_1 = exp_1.withColumn(
+    'experianResponse.experianCreditBureau.products.customSolution.bestAttributes',
+    filter_best_attributes_udf(F.col('experianResponse.experianCreditBureau.products.customSolution.bestAttributes'))
+)
+
+# Show the modified DataFrame with the updated bestAttributes field
+exp_1.select('experianResponse.experianCreditBureau.products.customSolution.bestAttributes').show(truncate=False)
