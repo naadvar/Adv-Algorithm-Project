@@ -1,0 +1,87 @@
+from pyspark.sql.functions import col, when, struct, array, size
+from pyspark.sql.types import StructType, ArrayType, StringType
+
+def clean_experian_data(df):
+    """
+    Removes empty strings, nulls, empty arrays, and empty structs from Experian credit bureau data
+    
+    Args:
+        df: PySpark DataFrame containing the Experian response data
+    Returns:
+        PySpark DataFrame with empty fields removed
+    """
+    
+    def clean_struct_fields(struct_col):
+        if struct_col is None:
+            return None
+            
+        fields = struct_col.dataType.fields
+        clean_fields = []
+        
+        for field in fields:
+            field_col = col(f"{struct_col.name}.{field.name}")
+            
+            # Handle special case for bestAttributes struct which contains EXP_AI fields
+            if field.name == "bestAttributes":
+                cleaned_best_attrs = when(
+                    field_col.isNotNull(),
+                    struct(*[
+                        when(col(f"{struct_col.name}.{field.name}.{attr}").isNotNull() &
+                             (col(f"{struct_col.name}.{field.name}.{attr}") != ""),
+                             col(f"{struct_col.name}.{field.name}.{attr}")
+                        ).alias(attr)
+                        for attr in df.select(f"{struct_col.name}.{field.name}.*").columns
+                    ])
+                ).alias(field.name)
+                clean_fields.append(cleaned_best_attrs)
+                
+            # Handle arrays (like addressInformation)
+            elif isinstance(field.dataType, ArrayType):
+                cleaned_array = when(
+                    field_col.isNotNull() & (size(field_col) > 0),
+                    field_col
+                ).alias(field.name)
+                clean_fields.append(cleaned_array)
+                
+            # Handle nested structs
+            elif isinstance(field.dataType, StructType):
+                cleaned_struct = clean_struct_fields(field_col)
+                if cleaned_struct is not None:
+                    clean_fields.append(cleaned_struct.alias(field.name))
+                    
+            # Handle primitive fields (strings, longs, etc.)
+            else:
+                cleaned_field = when(
+                    field_col.isNotNull() & (field_col != ""),
+                    field_col
+                ).alias(field.name)
+                clean_fields.append(cleaned_field)
+        
+        if clean_fields:
+            return struct(*clean_fields)
+        return None
+    
+    # Start with experianCreditBureau structure
+    experian_col = col("experianResponse.experianCreditBureau")
+    cleaned_experian = clean_struct_fields(experian_col)
+    
+    # Reconstruct the full response with cleaned Experian data
+    result = df.select(
+        col("experianResponse.clientRequestIdName"),
+        col("experianResponse.clientRequestIdValue"),
+        col("experianResponse.dataSourceName"),
+        when(cleaned_experian.isNotNull(), cleaned_experian).alias("experianCreditBureau")
+    )
+    
+    return result
+
+# Example usage:
+"""
+# Assuming your DataFrame is called 'experian_df':
+cleaned_df = clean_experian_data(experian_df)
+
+# To get just the customSolution bestAttributes:
+best_attributes_df = cleaned_df.select(
+    "experianResponse.experianCreditBureau.products.customSolution.bestAttributes"
+)
+"""
