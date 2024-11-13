@@ -1,0 +1,76 @@
+from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, StringType, ArrayType, MapType, LongType, Row
+
+# Define a recursive function to clean up falsy values within nested structures and track removed keys
+def clean_nested_structure(data):
+    removed_keys = []
+
+    def clean(data):
+        if isinstance(data, dict):
+            cleaned_data = {}
+            for k, v in data.items():
+                # Only keep values that are "truthy" (non-falsy)
+                if v:
+                    cleaned_data[k] = clean(v)
+                else:
+                    removed_keys.append(k)
+            return cleaned_data
+        
+        elif isinstance(data, list):
+            cleaned_list = []
+            for item in data:
+                # Only keep values that are "truthy" (non-falsy)
+                if item:
+                    cleaned_list.append(clean(item))
+                else:
+                    # We don't have a specific key to track for list items, so we skip adding to removed_keys
+                    pass
+            return cleaned_list
+
+        elif isinstance(data, Row):
+            # Convert Row to dictionary and clean each item
+            cleaned_data = {}
+            for field, value in data.asDict().items():
+                # Only keep values that are "truthy" (non-falsy)
+                if value:
+                    cleaned_data[field] = clean(value)
+                else:
+                    removed_keys.append(field)
+            return cleaned_data
+
+        # For other types, return as-is
+        return data
+
+    # Clean the structure and capture removed keys
+    cleaned_data = clean(data)
+    return (cleaned_data, removed_keys)
+
+# Register the function as a UDF with appropriate return types for both cleaned data and removed keys
+clean_nested_structure_udf = F.udf(
+    clean_nested_structure, 
+    StructType([
+        StructField("cleaned_data", ArrayType(MapType(StringType(), StringType()))),
+        StructField("removed_keys", ArrayType(StringType()))
+    ])
+)
+
+# Apply the UDF to clean the tradeLine field within the original DataFrame
+exp_1 = exp_1.withColumn(
+    'tradeLine_cleaned_result',
+    clean_nested_structure_udf(F.col('experianResponse.experianCreditBureau.products.customSolution.tradeLine'))
+)
+
+# Extract the cleaned tradeLine data and removed keys as separate columns
+exp_1 = exp_1.withColumn(
+    'experianResponse.experianCreditBureau.products.customSolution.tradeLine',
+    F.col('tradeLine_cleaned_result.cleaned_data')
+).withColumn(
+    'removed_keys',
+    F.col('tradeLine_cleaned_result.removed_keys')
+).drop('tradeLine_cleaned_result')
+
+# Show the modified DataFrame to verify the cleaned structure and removed keys
+exp_1.select(
+    'experianResponse.experianCreditBureau.products.customSolution.tradeLine',
+    'removed_keys'
+).show(truncate=False)
