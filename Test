@@ -1,105 +1,70 @@
-import pandas as pd
-import json
-
-def flatten_json(y, parent_key='', sep='_'):
-    """
-    Recursively flattens a nested JSON structure.
-    
-    Args:
-        y (dict or list): The JSON data.
-        parent_key (str): The base key string for nested keys.
-        sep (str): The separator between parent and child keys.
-
-    Returns:
-        dict: A flat dictionary with keys representing the path of each value.
-    """
-    items = []
-    if isinstance(y, dict):
-        for k, v in y.items():
-            new_key = f"{parent_key}{sep}{k}" if parent_key else k
-            if isinstance(v, dict):
-                items.extend(flatten_json(v, new_key, sep=sep).items())
-            elif isinstance(v, list):
-                for i, item in enumerate(v):
-                    items.extend(flatten_json(item, f"{new_key}_{i}", sep=sep).items())
-            else:
-                items.append((new_key, v))
-    elif isinstance(y, list):
-        for i, item in enumerate(y):
-            items.extend(flatten_json(item, f"{parent_key}_{i}", sep=sep).items())
-    else:
-        items.append((parent_key, y))
-    return dict(items)
-
-def json_to_flat_dataframe(json_data):
-    """
-    Converts a deeply nested JSON structure into a flat pandas DataFrame.
-    
-    Args:
-        json_data (dict or list): JSON data to be converted.
-
-    Returns:
-        pd.DataFrame: A DataFrame with key-value pairs as rows.
-    """
-    # Flatten each entry in the JSON data (assuming it's a list of entries)
-    if isinstance(json_data, list):
-        flat_data = [flatten_json(item) for item in json_data]
-    else:
-        flat_data = [flatten_json(json_data)]
-    
-    # Convert the list of flattened dictionaries to a DataFrame
-    return pd.DataFrame(flat_data)
-
-# Example usage
-# Load your JSON data from a file, API, or other source
-# Assuming `json_data` is your complex nested JSON structure (replace with your actual data)
-
-
 from pyspark.sql import functions as F
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql.types import StructType, StructField, StringType, ArrayType, MapType
 
-# Initialize Spark session
-spark = SparkSession.builder.appName("DeeplyNestedFilter").getOrCreate()
+# Define a recursive function to clean up empty values within nested structures and track removed keys
+def clean_nested_structure(data):
+    removed_keys = []
+    
+    if isinstance(data, dict):
+        cleaned_data = {}
+        for k, v in data.items():
+            if v in [None, "", " "]:
+                removed_keys.append(k)
+            else:
+                cleaned_value, nested_removed_keys = clean_nested_structure(v)
+                cleaned_data[k] = cleaned_value
+                removed_keys.extend(nested_removed_keys)
+        return cleaned_data, removed_keys
+    
+    elif isinstance(data, list):
+        cleaned_data = []
+        for item in data:
+            if item not in [None, "", " "]:
+                cleaned_value, nested_removed_keys = clean_nested_structure(item)
+                cleaned_data.append(cleaned_value)
+                removed_keys.extend(nested_removed_keys)
+        return cleaned_data, removed_keys
 
-# Load the JSON data without imposing schema
-exp = spark.read.option("multiline", "true").json("your_json_path.json")
+    elif isinstance(data, Row):
+        # Convert Row to dictionary, clean, and keep track of removed keys
+        cleaned_data = {}
+        for field, value in data.asDict().items():
+            if value in [None, "", " "]:
+                removed_keys.append(field)
+            else:
+                cleaned_value, nested_removed_keys = clean_nested_structure(value)
+                cleaned_data[field] = cleaned_value
+                removed_keys.extend(nested_removed_keys)
+        return cleaned_data, removed_keys
 
-# Function to recursively flatten the schema
-def flatten_schema(schema, prefix=None):
-    fields = []
-    for field in schema.fields:
-        field_name = f"{prefix}.{field.name}" if prefix else field.name
-        if isinstance(field.dataType, StructType):
-            fields += flatten_schema(field.dataType, prefix=field_name)
-        else:
-            fields.append(field_name)
-    return fields
+    # For other types, return as-is with no removed keys
+    return data, removed_keys
 
-# Function to flatten a DataFrame based on schema
-def flatten_df(df):
-    flat_cols = flatten_schema(df.schema)
-    flat_df = df
-    for col_name in flat_cols:
-        flat_df = flat_df.withColumn(col_name.replace('.', '_'), F.col(col_name))
-    return flat_df.select([col_name.replace('.', '_') for col_name in flat_cols])
+# Define a helper UDF function to clean the nested structure and return both cleaned data and removed keys
+def udf_clean_nested_structure(data):
+    cleaned_data, removed_keys = clean_nested_structure(data)
+    return (cleaned_data, removed_keys)
 
-# Flatten the DataFrame
-exp_flat_df = flatten_df(exp)
+# Define the schema for the returned struct from the UDF
+schema = StructType([
+    StructField("cleaned_data", MapType(StringType(), StringType())),  # Modify to appropriate type based on your structure
+    StructField("removed_keys", ArrayType(StringType()))
+])
 
-# Remove columns with value 0
-non_zero_columns = [
-    col for col in exp_flat_df.columns 
-    if exp_flat_df.select(col).where(F.col(col) == 0).count() == 0
-]
-exp_non_zero_df = exp_flat_df.select(*non_zero_columns)
+# Register the UDF with the defined schema
+clean_nested_structure_udf = F.udf(udf_clean_nested_structure, schema)
 
-# Cast all columns to StringType
-for col_name in exp_non_zero_df.columns:
-    exp_non_zero_df = exp_non_zero_df.withColumn(col_name, F.col(col_name).cast("string"))
+# Apply the UDF to clean the entire experianCreditBureau structure
+exp_1 = exp_1.withColumn(
+    'cleaned_experianCreditBureau',
+    clean_nested_structure_udf(F.col('experianResponse.experianCreditBureau'))
+)
 
-# Re-nest the DataFrame if necessary (keeping the flat structure if it's acceptable)
-# If nesting is needed, you would use complex aggregation, which could be customized based on schema.
+# Update experianCreditBureau with cleaned data and extract removed keys as a separate column
+exp_1 = exp_1.withColumn("experianResponse.experianCreditBureau", F.col("cleaned_experianCreditBureau.cleaned_data")) \
+             .withColumn("removed_keys", F.col("cleaned_experianCreditBureau.removed_keys")) \
+             .drop("cleaned_experianCreditBureau")
 
-# Show the final DataFrame
-exp_non_zero_df.show(truncate=False)
+# Show the modified DataFrame with both cleaned experianCreditBureau and removed keys
+exp_1.select('experianResponse.experianCreditBureau', 'removed_keys').show(truncate=False)
+    
