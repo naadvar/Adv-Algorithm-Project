@@ -1,0 +1,97 @@
+from pyspark.sql.functions import col, when, struct, array, size, lit
+from pyspark.sql.types import StructType, ArrayType, StringType
+
+def clean_experian_data(df):
+    """
+    Removes empty strings, nulls, empty arrays, and empty structs from Experian credit bureau data
+    
+    Args:
+        df: PySpark DataFrame containing the Experian response data
+    Returns:
+        PySpark DataFrame with empty fields removed
+    """
+    
+    def get_all_nested_fields(field_path, schema):
+        """Helper function to get all nested field names from a schema"""
+        fields = []
+        
+        for field in schema.fields:
+            current_path = f"{field_path}.{field.name}" if field_path else field.name
+            
+            if isinstance(field.dataType, StructType):
+                fields.extend(get_all_nested_fields(current_path, field.dataType))
+            else:
+                fields.append(current_path)
+                
+        return fields
+
+    # Get all bestAttributes fields
+    best_attrs_fields = [
+        field for field in get_all_nested_fields("", df.schema)
+        if "bestAttributes" in field and "EXP_AI" in field
+    ]
+    
+    # Start building the selection expressions
+    select_expr = []
+    
+    # Handle experianResponse fields
+    select_expr.extend([
+        when(col("experianResponse.clientRequestIdName").isNotNull() & 
+             (col("experianResponse.clientRequestIdName") != ""),
+             col("experianResponse.clientRequestIdName")).alias("clientRequestIdName"),
+        
+        when(col("experianResponse.clientRequestIdValue").isNotNull() & 
+             (col("experianResponse.clientRequestIdValue") != ""),
+             col("experianResponse.clientRequestIdValue")).alias("clientRequestIdValue"),
+        
+        when(col("experianResponse.dataSourceName").isNotNull() & 
+             (col("experianResponse.dataSourceName") != ""),
+             col("experianResponse.dataSourceName")).alias("dataSourceName")
+    ])
+    
+    # Handle experianCreditBureau fields
+    experian_fields = [
+        when(col("experianResponse.experianCreditBureau.completionCode").isNotNull() &
+             (col("experianResponse.experianCreditBureau.completionCode") != ""),
+             col("experianResponse.experianCreditBureau.completionCode")).alias("completionCode")
+    ]
+    
+    # Handle products.customSolution fields
+    custom_solution_fields = []
+    
+    # Handle bestAttributes specifically
+    best_attrs_struct = struct(*[
+        when(col(field).isNotNull() & (col(field) != ""), col(field)).alias(field.split(".")[-1])
+        for field in best_attrs_fields
+    ]).alias("bestAttributes")
+    
+    custom_solution_fields.append(best_attrs_struct)
+    
+    # Add addressInformation array handling
+    address_info = when(
+        size(col("experianResponse.experianCreditBureau.products.customSolution.addressInformation")) > 0,
+        col("experianResponse.experianCreditBureau.products.customSolution.addressInformation")
+    ).alias("addressInformation")
+    
+    custom_solution_fields.append(address_info)
+    
+    # Combine all fields
+    custom_solution_struct = struct(*custom_solution_fields).alias("customSolution")
+    products_struct = struct(custom_solution_struct).alias("products")
+    experian_fields.append(products_struct)
+    
+    # Build final experianCreditBureau struct
+    experian_struct = struct(*experian_fields).alias("experianCreditBureau")
+    select_expr.append(experian_struct)
+    
+    # Create final DataFrame
+    return df.select(*select_expr)
+
+# Example usage:
+"""
+# Assuming your DataFrame is called 'experian_df':
+cleaned_df = clean_experian_data(experian_df)
+
+# To verify the cleaning:
+cleaned_df.select("experianResponse.experianCreditBureau.products.customSolution.bestAttributes.*").show()
+"""
