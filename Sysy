@@ -1,0 +1,32 @@
+from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, StringType, ArrayType, MapType, LongType
+
+# Define a recursive function to clean up empty values within nested structures
+def clean_nested_structure(data):
+    if isinstance(data, dict):
+        # Recursively clean each value in the dictionary
+        return {k: clean_nested_structure(v) for k, v in data.items() if v not in [None, "", " "]}
+    
+    elif isinstance(data, list):
+        # Recursively clean each item in the list
+        return [clean_nested_structure(item) for item in data if item not in [None, "", " "]]
+
+    elif isinstance(data, Row):
+        # Convert Row to dictionary and clean each item
+        cleaned_data = {field: clean_nested_structure(value) for field, value in data.asDict().items() if value not in [None, "", " "]}
+        return cleaned_data
+
+    # For other types, return as-is
+    return data
+
+# Register the function as a UDF to apply it to tradeLine
+clean_nested_structure_udf = F.udf(clean_nested_structure, ArrayType(MapType(StringType(), StringType())))
+
+# Apply the UDF to clean the tradeLine field within the original DataFrame
+exp_1 = exp_1.withColumn(
+    'experianResponse.experianCreditBureau.products.customSolution.tradeLine',
+    clean_nested_structure_udf(F.col('experianResponse.experianCreditBureau.products.customSolution.tradeLine'))
+)
+
+# Show the modified DataFrame to verify
+exp_1.select('experianResponse.experianCreditBureau.products.customSolution.tradeLine').show(truncate=False)
