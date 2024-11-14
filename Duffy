@@ -1,0 +1,44 @@
+import json
+import re
+from pyspark.sql import SparkSession
+
+# Initialize Spark Session
+spark = SparkSession.builder.appName("RemoveEmptyKeysAndCleanSpaces").getOrCreate()
+
+# Recursive function to clean dictionaries, lists, and nested structures
+def clean_structure(item):
+    if isinstance(item, dict):
+        # Recursively clean each key-value pair in a dictionary
+        cleaned_dict = {}
+        for k, v in item.items():
+            # Remove keys with only whitespace or empty string, after cleaning spaces
+            cleaned_key = re.sub(r"\s+", " ", k).strip()  # Clean extra spaces in the key
+            if cleaned_key and v not in [None, "", [], {}]:
+                cleaned_value = clean_structure(v)  # Recursively clean the value
+                if cleaned_value not in [None, "", [], {}]:  # Only keep non-empty values
+                    cleaned_dict[cleaned_key] = cleaned_value
+        return cleaned_dict
+
+    elif isinstance(item, list):
+        # Recursively clean each element in a list
+        cleaned_list = [clean_structure(i) for i in item if i not in [None, "", [], {}]]
+        return cleaned_list
+
+    elif isinstance(item, str):
+        # Replace multiple spaces with a single space in strings
+        return re.sub(r"\s+", " ", item).strip()
+
+    else:
+        # For other types (int, float, etc.), return the item as-is
+        return item
+
+# Convert DataFrame to JSON RDD to manipulate the JSON-like structure
+json_rdd = exp_1.toJSON().map(lambda x: json.loads(x))
+
+# Apply the cleaning function to each JSON object
+cleaned_rdd = json_rdd.map(lambda x: clean_structure(x))
+
+# Convert the cleaned RDD back to a DataFrame
+cleaned_df = spark.read.json(cleaned_rdd)
+cleaned_df.printSchema()
+cleaned_df.show(truncate=False)
