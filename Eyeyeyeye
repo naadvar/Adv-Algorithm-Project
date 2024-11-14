@@ -1,0 +1,48 @@
+import json
+import re
+from pyspark.sql import SparkSession
+
+# Initialize Spark Session
+spark = SparkSession.builder.appName("RemoveEmptyKeysAndCleanSpaces").getOrCreate()
+
+# Recursive function to clean dictionaries, lists, and nested structures
+def clean_structure(item):
+    if isinstance(item, dict):
+        cleaned_dict = {}
+        for k, v in item.items():
+            # Clean extra spaces in the key and ignore keys with only whitespace
+            cleaned_key = re.sub(r"\s+", " ", k).strip()
+            if cleaned_key and v not in [None, "", [], {}]:
+                cleaned_value = clean_structure(v)  # Recursively clean the value
+                if cleaned_value not in [None, "", [], {}]:  # Only keep non-empty values
+                    cleaned_dict[cleaned_key] = cleaned_value
+        return cleaned_dict
+
+    elif isinstance(item, list):
+        # Recursively clean each element in a list
+        cleaned_list = [clean_structure(i) for i in item if i not in [None, "", [], {}]]
+        return cleaned_list
+
+    elif isinstance(item, str):
+        # Replace multiple spaces with a single space in strings
+        return re.sub(r"\s+", " ", item).strip()
+
+    else:
+        # For other types (int, float, etc.), return the item as-is
+        return item
+
+# Convert DataFrame to JSON RDD
+json_rdd = exp_1.toJSON().map(lambda x: json.loads(x))
+
+# Apply the cleaning function to each JSON object
+cleaned_rdd = json_rdd.map(lambda x: clean_structure(x))
+
+# Convert the cleaned RDD back to JSON strings to allow PySpark to infer schema
+cleaned_json_rdd = cleaned_rdd.map(lambda x: json.dumps(x))
+
+# Read the JSON strings as a DataFrame with inferred schema
+cleaned_df = spark.read.json(cleaned_json_rdd)
+
+# Display the schema and data
+cleaned_df.printSchema()
+cleaned_df.show(truncate=False)
