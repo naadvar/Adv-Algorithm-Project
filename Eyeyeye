@@ -1,0 +1,81 @@
+import json
+import re
+from pyspark.sql import SparkSession, functions as F
+from pyspark.sql.types import StructType, ArrayType  # Import StructType and ArrayType
+
+# Initialize Spark Session
+spark = SparkSession.builder.appName("RemoveEmptyKeysCleanSpacesRemoveNulls").getOrCreate()
+
+# Recursive function to clean dictionaries, lists, and nested structures
+def clean_structure(item):
+    if isinstance(item, dict):
+        cleaned_dict = {}
+        for k, v in item.items():
+            # Clean extra spaces in the key and ignore keys with only whitespace
+            cleaned_key = re.sub(r"\s+", " ", k).strip()
+            # Check if value is non-null and non-empty
+            if cleaned_key and v is not None and v != "" and v != [] and v != {}:
+                cleaned_value = clean_structure(v)  # Recursively clean the value
+                # Only add to dict if cleaned_value is non-null and non-empty
+                if cleaned_value is not None and cleaned_value != "" and cleaned_value != [] and cleaned_value != {}:
+                    cleaned_dict[cleaned_key] = cleaned_value
+        return cleaned_dict
+
+    elif isinstance(item, list):
+        # Recursively clean each element in a list and filter out empty or None elements
+        cleaned_list = [clean_structure(i) for i in item if i is not None and i != "" and i != [] and i != {}]
+        return cleaned_list
+
+    elif isinstance(item, str):
+        # Replace multiple spaces with a single space in strings
+        cleaned_item = re.sub(r"\s+", " ", item).strip()
+        return cleaned_item
+
+    else:
+        # For other types (int, float, etc.), return the item as-is if it's not None
+        return item if item is not None else None
+
+# Extract the 'experianCreditBureau' field, convert it to JSON RDD
+json_rdd = exp_1.select("experianResponse.experianCreditBureau").toJSON().map(lambda x: json.loads(x))
+
+# Apply the cleaning function to each JSON object in the 'experianCreditBureau' field
+cleaned_rdd = json_rdd.map(lambda x: clean_structure(x))
+
+# Convert the cleaned RDD back to JSON strings to allow PySpark to infer schema
+cleaned_json_rdd = cleaned_rdd.map(lambda x: json.dumps(x))
+
+# Read the cleaned JSON strings as a DataFrame with inferred schema
+cleaned_credit_bureau_df = spark.read.json(cleaned_json_rdd)
+
+# Define a function to recursively remove any remaining null values in the DataFrame
+def remove_nulls_from_df(df):
+    for column in df.columns:
+        # If column is a struct, recurse into it
+        if isinstance(df.schema[column].dataType, StructType):
+            df = df.withColumn(column, remove_nulls_from_df(F.col(column)))
+        # If column is an array, apply cleaning on each element
+        elif isinstance(df.schema[column].dataType, ArrayType):
+            df = df.withColumn(
+                column, 
+                F.expr(f"FILTER({column}, x -> x IS NOT NULL)")
+            )
+    return df
+
+# Apply the remove_nulls_from_df function to the cleaned DataFrame
+cleaned_credit_bureau_df = remove_nulls_from_df(cleaned_credit_bureau_df)
+
+# Replace the cleaned 'experianCreditBureau' back in the original DataFrame
+final_df = exp_1.withColumn("experianResponse", 
+                            F.struct(
+                                F.col("experianResponse.bureauErrorData"),
+                                F.col("experianResponse.bureauResponseReceivedTime"),
+                                F.col("experianResponse.checksumMetadata"),
+                                F.col("experianResponse.clientRequestIdName"),
+                                F.col("experianResponse.clientRequestIdValue"),
+                                F.col("experianResponse.dataSourceName"),
+                                cleaned_credit_bureau_df.alias("experianCreditBureau")  # Use cleaned nested field
+                            ))
+
+# Display the schema and data of the final DataFrame
+final_df.printSchema()
+final_df.show(truncate=False)
