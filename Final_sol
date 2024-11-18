@@ -1,0 +1,139 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, expr, struct, size
+from pyspark.sql.types import StructType, StructField, ArrayType, StringType, IntegerType
+
+def remove_null_keys(df):
+    """
+    Recursively remove null keys from a PySpark DataFrame
+    
+    Args:
+        df (pyspark.sql.DataFrame): Input DataFrame with potentially null keys
+    
+    Returns:
+        pyspark.sql.DataFrame: Cleaned DataFrame with null keys removed
+    """
+    def clean_struct(df, column):
+        """
+        Clean nested struct columns by removing null keys
+        
+        Args:
+            df (pyspark.sql.DataFrame): Input DataFrame
+            column (str): Name of the struct column to clean
+        
+        Returns:
+            pyspark.sql.DataFrame: DataFrame with cleaned struct
+        """
+        # Get the struct type
+        struct_type = df.schema[column].dataType
+        
+        # Identify non-null fields
+        non_null_fields = [
+            field.name for field in struct_type.fields 
+            if df.select(col(f"{column}.{field.name}").isNotNull()).first()[0]
+        ]
+        
+        # If no non-null fields, drop the entire column
+        if not non_null_fields:
+            return df.drop(column)
+        
+        # Select only non-null fields
+        select_exprs = [
+            col(f"{column}.{field}").alias(f"{column}_{field}")
+            for field in non_null_fields
+        ]
+        
+        # Add the selected fields and drop original struct
+        return df.select("*", *select_exprs).drop(column)
+
+    def clean_nested_columns(df):
+        """
+        Recursively clean nested columns in the DataFrame
+        
+        Args:
+            df (pyspark.sql.DataFrame): Input DataFrame
+        
+        Returns:
+            pyspark.sql.DataFrame: Cleaned DataFrame
+        """
+        for column in df.columns:
+            column_type = df.schema[column].dataType
+            
+            # Handle nested structs
+            if isinstance(column_type, StructType):
+                df = clean_struct(df, column)
+            
+            # Handle arrays
+            elif isinstance(column_type, ArrayType):
+                # Remove empty arrays and arrays with all null values
+                df = df.filter(
+                    (col(column).isNotNull()) & 
+                    (size(col(column)) > 0)
+                )
+        
+        return df
+
+    # Apply recursive cleaning
+    cleaned_df = clean_nested_columns(df)
+    
+    # Remove rows with all null values
+    cleaned_df = cleaned_df.na.drop(how='all')
+    
+    return cleaned_df
+
+# Example usage
+def main():
+    # Create Spark session
+    spark = SparkSession.builder.appName("RemoveNullKeys").getOrCreate()
+
+    # Load JSON into a PySpark DataFrame
+    data = [
+        {
+            "city": "DENVER",
+            "dwellingType": {
+                "code": "A",
+                "value": "Apartment complex"
+            },
+            "lastReportingSubcode": None,
+            "lastUpdatedDate": "05092023",
+            "origination": {
+                "code": "1",
+                "value": "Reported via A/R Tape, but different from inquiry"
+            },
+            "state": "CO",
+            "streetName": "ALABAMA",
+            "unitID": "1316",
+            "unitType": "APT",
+            "zip": "802476358"
+        },
+        {
+            "city": "LANCASTER",
+            "dwellingType": {
+                "code": None,
+                "value": "Unknown"
+            },
+            "lastReportingSubcode": None,
+            "lastUpdatedDate": "06092023",
+            "origination": {
+                "code": None,
+                "value": "Unknown"
+            },
+            "state": "PA",
+            "streetName": None,
+            "unitID": None,
+            "unitType": None,
+            "zip": "176022398"
+        }
+    ]
+
+    # Convert JSON to DataFrame
+    df = spark.read.json(spark.sparkContext.parallelize(data))
+
+    # Apply null key removal
+    df_cleaned = remove_null_keys(df)
+
+    # Show cleaned DataFrame
+    df_cleaned.show(truncate=False)
+    df_cleaned.printSchema()
+
+if __name__ == "__main__":
+    main()
