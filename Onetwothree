@@ -1,0 +1,127 @@
+import json
+import re
+from pyspark.sql import SparkSession, functions as F
+from pyspark.sql.types import StructType, ArrayType
+
+# Initialize Spark Session
+spark = SparkSession.builder.appName("RemoveNullsFromNestedStructures").getOrCreate()
+
+# Recursive function to clean dictionaries, lists, and nested structures
+def clean_structure(item):
+    if isinstance(item, dict):
+        cleaned_dict = {}
+        for k, v in item.items():
+            # Clean extra spaces in the key and ignore keys with only whitespace
+            cleaned_key = re.sub(r"\s+", " ", k).strip()
+            # Check if value is non-null and non-empty
+            if cleaned_key and v is not None and v != "" and v != [] and v != {}:
+                cleaned_value = clean_structure(v)  # Recursively clean the value
+                if cleaned_value not in [None, "", [], {}]:  # Only keep non-empty values
+                    cleaned_dict[cleaned_key] = cleaned_value
+        return cleaned_dict
+
+    elif isinstance(item, list):
+        # Recursively clean each element in a list and filter out empty or None elements
+        cleaned_list = [clean_structure(i) for i in item if i is not None and i != "" and i != [] and i != {}]
+        return cleaned_list
+
+    elif isinstance(item, str):
+        # Replace multiple spaces with a single space in strings
+        return re.sub(r"\s+", " ", item).strip()
+
+    else:
+        # For other types (int, float, etc.), return the item as-is
+        return item if item is not None else None
+
+def recursively_remove_nulls(df):
+    """Remove null values from all fields recursively"""
+    
+    # Helper function to process each field
+    def process_field(field_path):
+        return F.when(
+            F.col(field_path).isNotNull() & 
+            (F.col(field_path) != F.lit("")) & 
+            (~F.to_json(F.col(field_path)).contains("null")),
+            F.col(field_path)
+        )
+
+    # Get all field paths recursively
+    def get_all_fields(schema, prefix=""):
+        fields = []
+        for field in schema.fields:
+            field_path = prefix + "." + field.name if prefix else field.name
+            if isinstance(field.dataType, StructType):
+                fields.extend(get_all_fields(field.dataType, field_path))
+            elif isinstance(field.dataType, ArrayType):
+                if isinstance(field.dataType.elementType, StructType):
+                    # Handle arrays of structs
+                    array_struct_expr = f"""
+                        filter(
+                            transform(
+                                {field_path},
+                                x -> case 
+                                    when x is not null and to_json(x) not like '%null%'
+                                    then x
+                                    else null
+                                end
+                            ),
+                            x -> x is not null
+                        )
+                    """
+                    df = df.withColumn(field_path, F.expr(array_struct_expr))
+                else:
+                    # Handle simple arrays
+                    df = df.withColumn(
+                        field_path,
+                        F.expr(f"filter({field_path}, x -> x is not null)")
+                    )
+            fields.append(field_path)
+        return fields
+
+    # Process all fields
+    field_paths = get_all_fields(df.schema)
+    for field_path in field_paths:
+        if "." in field_path:
+            # Handle nested fields
+            parent_path = field_path.rsplit(".", 1)[0]
+            field_name = field_path.rsplit(".", 1)[1]
+            struct_fields = [
+                process_field(f"{parent_path}.{f.name}").alias(f.name)
+                for f in df.schema[parent_path].dataType.fields
+            ]
+            df = df.withColumn(parent_path, F.struct(*struct_fields))
+        else:
+            # Handle top-level fields
+            df = df.withColumn(field_path, process_field(field_path))
+
+    return df
+
+# Extract the 'experianResponse' field, convert it to JSON RDD
+json_rdd = exp_1.select("experianResponse").toJSON().map(lambda x: json.loads(x))
+
+# Apply the cleaning function to each JSON object in the 'experianResponse' field
+cleaned_rdd = json_rdd.map(lambda x: clean_structure(x))
+
+# Convert the cleaned RDD back to JSON strings to allow PySpark to infer schema
+cleaned_json_rdd = cleaned_rdd.map(lambda x: json.dumps(x))
+
+# Read the cleaned JSON strings as a DataFrame with inferred schema
+cleaned_response_df = spark.read.json(cleaned_json_rdd)
+
+# Apply the recursive null removal function
+cleaned_response_df = recursively_remove_nulls(cleaned_response_df)
+
+# Replace the cleaned 'experianResponse' back in the original DataFrame
+final_df = exp_1.withColumn("experianResponse", 
+                          F.struct(
+                              *[
+                                  F.col(f"experianResponse.{field.name}") 
+                                  if field.name != "experianCreditBureau" 
+                                  else cleaned_response_df.alias("experianCreditBureau")
+                                  for field in exp_1.schema["experianResponse"].dataType.fields
+                              ]
+                          ))
+
+# Display the schema and data of the final cleaned DataFrame
+final_df.printSchema()
+final_df.show(truncate=False)
