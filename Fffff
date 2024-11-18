@@ -1,0 +1,74 @@
+import json
+import re
+from pyspark.sql import SparkSession, functions as F
+from pyspark.sql.types import StructType, ArrayType
+
+# Initialize Spark Session
+spark = SparkSession.builder.appName("RemoveNullsFromNestedStructures").getOrCreate()
+
+# Recursive function to clean dictionaries, lists, and nested structures
+def clean_structure(item):
+    if isinstance(item, dict):
+        cleaned_dict = {}
+        for k, v in item.items():
+            # Clean extra spaces in the key and ignore keys with only whitespace
+            cleaned_key = re.sub(r"\s+", " ", k).strip()
+            # Check if value is non-null and non-empty
+            if cleaned_key and v is not None and v != "" and v != [] and v != {}:
+                cleaned_value = clean_structure(v)  # Recursively clean the value
+                if cleaned_value not in [None, "", [], {}]:  # Only keep non-empty values
+                    cleaned_dict[cleaned_key] = cleaned_value
+        return cleaned_dict
+
+    elif isinstance(item, list):
+        # Recursively clean each element in a list and filter out empty or None elements
+        cleaned_list = [clean_structure(i) for i in item if i is not None and i != "" and i != [] and i != {}]
+        return cleaned_list
+
+    elif isinstance(item, str):
+        # Replace multiple spaces with a single space in strings
+        return re.sub(r"\s+", " ", item).strip()
+
+    else:
+        # For other types (int, float, etc.), return the item as-is
+        return item if item is not None else None
+
+# Extract the 'experianCreditBureau' field, convert it to JSON RDD
+json_rdd = exp_1.select("experianResponse").toJSON().map(lambda x: json.loads(x))
+
+# Apply the cleaning function to each JSON object in the 'experianResponse' field
+cleaned_rdd = json_rdd.map(lambda x: clean_structure(x))
+
+# Convert the cleaned RDD back to JSON strings to allow PySpark to infer schema
+cleaned_json_rdd = cleaned_rdd.map(lambda x: json.dumps(x))
+
+# Read the cleaned JSON strings as a DataFrame with inferred schema
+cleaned_response_df = spark.read.json(cleaned_json_rdd)
+
+# Function to explicitly replace or remove nulls from StructType and ArrayType columns
+def remove_nulls_from_df(df):
+    for column_name in df.columns:
+        column_type = df.schema[column_name].dataType
+        # If column is a struct, recursively clean its fields
+        if isinstance(column_type, StructType):
+            struct_fields = [
+                F.when(F.col(f"{column_name}.{field.name}").isNotNull(), F.col(f"{column_name}.{field.name}")).alias(field.name)
+                for field in column_type.fields
+            ]
+            df = df.withColumn(column_name, F.struct(*struct_fields))
+        
+        # If column is an array, filter out null elements
+        elif isinstance(column_type, ArrayType):
+            df = df.withColumn(column_name, F.expr(f"FILTER({column_name}, x -> x IS NOT NULL)"))
+        
+        # For all other types, replace nulls with a default value if needed
+        else:
+            df = df.withColumn(column_name, F.when(F.col(column_name).isNotNull(), F.col(column_name)))
+    return df
+
+# Apply the function to remove nulls from the entire DataFrame
+cleaned_response_df = remove_nulls_from_df(cleaned_response_df)
+
+# Display the schema and data of the final cleaned DataFrame
+cleaned_response_df.printSchema()
+cleaned_response_df.show(truncate=False)
