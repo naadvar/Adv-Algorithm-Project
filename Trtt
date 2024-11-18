@@ -1,0 +1,39 @@
+from pyspark.sql.functions import col, udf, from_json
+from pyspark.sql.types import StringType
+import json
+
+# Define the recursive cleaning function
+def clean_json_data(json_str):
+    """
+    Cleans a JSON string by removing:
+    - Keys with null values
+    - Keys with empty strings
+    - Keys with empty lists
+    - Keys with empty dictionaries
+    """
+    def recursive_clean(d):
+        if isinstance(d, dict):
+            return {k: recursive_clean(v) for k, v in d.items() if v not in [None, "", [], {}]}
+        elif isinstance(d, list):
+            return [recursive_clean(v) for v in d if v not in [None, "", [], {}]]
+        else:
+            return d
+
+    try:
+        json_data = json.loads(json_str)
+        cleaned_data = recursive_clean(json_data)
+        return json.dumps(cleaned_data)
+    except Exception as e:
+        return json_str  # Return the original string if JSON parsing fails
+
+# Register the function as a UDF
+clean_json_udf = udf(clean_json_data, StringType())
+
+# Apply the cleaning function to the 'experianResponse' column
+cleaned_exp = exp_1.withColumn("cleaned_experianResponse", clean_json_udf(col("experianResponse")))
+
+# Optionally drop the original column if not needed
+cleaned_exp = cleaned_exp.drop("experianResponse")
+
+# Display the cleaned data
+cleaned_exp.show(truncate=False)
