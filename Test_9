@@ -1,0 +1,45 @@
+from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, ArrayType
+
+# Define a recursive function to remove nulls from StructType and ArrayType columns
+def remove_nulls_from_column(df, column_name):
+    column_type = df.schema[column_name].dataType
+
+    if isinstance(column_type, StructType):
+        # Process StructType fields recursively
+        struct_fields = [
+            F.when(F.col(f"{column_name}.{field.name}").isNotNull(), F.col(f"{column_name}.{field.name}"))
+            .alias(field.name)
+            for field in column_type.fields
+        ]
+        return df.withColumn(column_name, F.struct(*struct_fields))
+
+    elif isinstance(column_type, ArrayType):
+        # Filter nulls from ArrayType fields
+        return df.withColumn(column_name, F.expr(f"FILTER({column_name}, x -> x IS NOT NULL)"))
+
+    else:
+        # For other column types, ensure nulls are removed
+        return df.withColumn(column_name, F.when(F.col(column_name).isNotNull(), F.col(column_name)))
+
+# Extract the 'experianCreditBureau' field
+experian_credit_bureau_df = exp_1.select("experianResponse.experianCreditBureau")
+
+# Apply the null removal function to the 'experianCreditBureau' field
+cleaned_experian_credit_bureau_df = remove_nulls_from_column(experian_credit_bureau_df, "experianCreditBureau")
+
+# Replace the cleaned 'experianCreditBureau' back in the original DataFrame
+final_df = exp_1.withColumn(
+    "experianResponse",
+    F.struct(
+        *[
+            F.col(f"experianResponse.{field.name}") if field.name != "experianCreditBureau"
+            else cleaned_experian_credit_bureau_df["experianCreditBureau"]
+            for field in exp_1.schema["experianResponse"].dataType.fields
+        ]
+    )
+)
+
+# Display the schema and the final cleaned DataFrame
+final_df.printSchema()
+final_df.show(truncate=False)
