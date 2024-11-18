@@ -106,3 +106,29 @@ final_df = cleaned_df.drop("experianResponse", "parsed_json")
 
 # Display the cleaned JSON column
 final_df.select("cleaned_json").show(truncate=False)
+
+
+from pyspark.sql.functions import col, struct, when
+
+# Function to recursively clean a struct
+def clean_nested_json(schema, col_name):
+    fields = []
+    for field in schema.fields:
+        field_name = field.name
+        field_type = field.dataType
+        if isinstance(field_type, StructType):
+            # Recursively handle nested structs
+            fields.append(
+                (col(field_name).isNotNull(), clean_nested_json(field_type, field_name))
+            )
+        else:
+            fields.append(
+                when(
+                    (col(field_name).isNotNull()) & (col(field_name) != "") & (col(field_name) != "{}") & (col(field_name) != "[]"),
+                    col(field_name),
+                )
+            )
+    return struct(*fields)
+
+# Apply the cleaning function
+cleaned_df = parsed_df.withColumn("cleaned_json", clean_nested_json(parsed_df.schema, "parsed_json"))
