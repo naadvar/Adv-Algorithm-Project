@@ -1,0 +1,66 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when
+
+# Create a Spark session
+spark = SparkSession.builder.appName("RemoveNullValues").getOrCreate()
+
+# Example JSON data
+data = [
+    {
+        "bureauErrorData": None,
+        "bureauRawReportFeatureExecutionCode": "BureauEndStateInternalExecution",
+        "bureauResponseReceivedTime": {
+            "nanos": 423000000,
+            "seconds": 1730323822
+        },
+        "checksumMetadata": {
+            "checkSum": "6ae624b2505834f8b25c9954685d044c",
+            "dataLength": "230821"
+        },
+        "products": {
+            "customSolution": [
+                {
+                    "addressInformation": [
+                        {
+                            "city": "MIAMI",
+                            "code": "S",
+                            "value": "Single-family dwelling",
+                            "unitID": None,
+                            "unitType": None
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+]
+
+# Load JSON data into a PySpark DataFrame
+df = spark.read.json(spark.sparkContext.parallelize(data), multiLine=True)
+
+# Function to replace `null` values at the column level
+def remove_null_values(df):
+    # Iterate through columns and remove nulls
+    for column in df.columns:
+        if df.schema[column].dataType.typeName() == "struct":
+            # For nested structs, apply the same function recursively
+            nested_cols = [f"{column}.{field.name}" for field in df.schema[column].dataType.fields]
+            for nested_col in nested_cols:
+                df = df.withColumn(nested_col.replace(".", "_"), col(nested_col))
+            df = df.drop(column)
+        elif df.schema[column].dataType.typeName() == "array":
+            # For arrays, filter out null values
+            df = df.withColumn(column, when(col(column).isNotNull(), col(column)).otherwise(None))
+        else:
+            # For standard columns, drop nulls
+            df = df.withColumn(column, when(col(column).isNotNull(), col(column)).otherwise(None))
+    return df
+
+# Apply the transformation
+df_cleaned = remove_null_values(df)
+
+# Drop rows where all columns are null (if needed)
+df_cleaned = df_cleaned.na.drop("all")
+
+# Show the cleaned DataFrame
+df_cleaned.show(truncate=False)
