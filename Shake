@@ -1,0 +1,62 @@
+import json
+from pyspark.sql import SparkSession
+
+# Create a Spark session
+spark = SparkSession.builder.appName("RemoveDeeplyNestedNulls_Alternative").getOrCreate()
+
+# Sample deeply nested JSON data
+data = [
+    {
+        "statusDate": "09012024",
+        "subcode": "2931259",
+        "termsDuration": {
+            "code": "REV",
+            "value": "Revolving"
+        },
+        "tradeSpecialPaymentInformation": None,
+        "trendedData": {
+            "month": [
+                {
+                    "actualPaymentAmount": None,
+                    "balanceAmount": None,
+                    "lastPaymentDate": None,
+                    "monthID": "00",
+                    "originalLoanAmountClimit": None,
+                    "scheduledPaymentAmount": None,
+                },
+                {
+                    "actualPaymentAmount": "UNKNOWN",
+                    "balanceAmount": "00000370",
+                    "lastPaymentDate": "08212024",
+                    "monthID": "01",
+                    "originalLoanAmountClimit": "00000300",
+                    "scheduledPaymentAmount": "00000041",
+                },
+            ]
+        }
+    }
+]
+
+# Load JSON data into a PySpark DataFrame
+df = spark.read.json(spark.sparkContext.parallelize(data))
+
+# Step 1: Convert DataFrame rows to JSON strings
+json_strings = df.toJSON().collect()
+
+# Step 2: Clean each JSON string using Python
+def remove_nulls(obj):
+    """Recursively remove null values from JSON."""
+    if isinstance(obj, dict):
+        return {k: remove_nulls(v) for k, v in obj.items() if v is not None}
+    elif isinstance(obj, list):
+        return [remove_nulls(v) for v in obj if v is not None]
+    else:
+        return obj
+
+cleaned_json = [json.dumps(remove_nulls(json.loads(row))) for row in json_strings]
+
+# Step 3: Load cleaned JSON back into a PySpark DataFrame
+cleaned_df = spark.read.json(spark.sparkContext.parallelize(cleaned_json))
+
+# Show the cleaned DataFrame
+cleaned_df.show(truncate=False)
