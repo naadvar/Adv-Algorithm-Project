@@ -1,0 +1,36 @@
+import pandas as pd
+import numpy as np
+import json
+
+# Convert PySpark DataFrame to Pandas DataFrame
+pandas_df = exp_1.toPandas()
+
+# Define a recursive function to clean nested dictionaries and lists
+def remove_nulls(obj):
+    if isinstance(obj, dict):
+        return {k: remove_nulls(v) for k, v in obj.items() if v is not None and v != {} and v != []}
+    elif isinstance(obj, list):
+        return [remove_nulls(item) for item in obj if item is not None]
+    else:
+        return obj
+
+# Process the 'experianResponse.experianCreditBureau' field
+def clean_experian_credit_bureau(row):
+    experian_credit_bureau = row.get('experianResponse', {}).get('experianCreditBureau', None)
+    if experian_credit_bureau:
+        return remove_nulls(experian_credit_bureau)
+    return None
+
+# Apply the cleaning function to the 'experianCreditBureau' field
+pandas_df['experianResponse'] = pandas_df['experianResponse'].apply(
+    lambda response: {
+        **response,
+        'experianCreditBureau': clean_experian_credit_bureau(response) if response else None
+    }
+)
+
+# Convert Pandas DataFrame back to PySpark DataFrame
+cleaned_exp_1 = spark.createDataFrame(pandas_df)
+
+# Show the results
+cleaned_exp_1.show(truncate=False)
