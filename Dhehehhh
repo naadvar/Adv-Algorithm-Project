@@ -79,3 +79,30 @@ exp_1 = exp_1.withColumn(
 
 # Show the modified DataFrame with both cleaned experianCreditBureau and removed keys
 exp_1.select('experianResponse.experianCreditBureau', 'removed_keys').show(truncate=False)
+
+from pyspark.sql.functions import col, from_json, to_json, expr
+from pyspark.sql.types import StringType, MapType
+
+# Parse the 'experianResponse' JSON column into a Spark DataFrame column with MapType
+json_schema = MapType(StringType(), StringType())  # Assuming JSON has a key-value structure
+
+parsed_df = exp_2.withColumn("parsed_json", from_json(col("experianResponse"), json_schema))
+
+# Filter out null, empty strings, and empty lists/dictionaries in JSON using Spark SQL
+cleaned_df = parsed_df.withColumn(
+    "cleaned_json",
+    expr("""
+        to_json(transform_keys(parsed_json, (k, v) -> 
+            CASE 
+                WHEN v IS NULL OR v = '' OR v = '{}' OR v = '[]' THEN null
+                ELSE v
+            END
+        ))
+    """)
+)
+
+# Optionally drop the original JSON column and intermediate parsed column
+final_df = cleaned_df.drop("experianResponse", "parsed_json")
+
+# Display the cleaned JSON column
+final_df.select("cleaned_json").show(truncate=False)
