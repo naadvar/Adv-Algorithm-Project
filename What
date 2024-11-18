@@ -1,0 +1,53 @@
+import json
+import re
+from pyspark.sql import SparkSession, functions as F
+from pyspark.sql.types import StructType, ArrayType
+
+# Initialize Spark Session
+spark = SparkSession.builder.appName("RemoveNullsFromNestedJSON").getOrCreate()
+
+# Define a function to recursively remove nulls from StructType and ArrayType columns
+def remove_nulls_recursively(df):
+    for field in df.schema.fields:
+        column_name = field.name
+        column_type = field.dataType
+
+        if isinstance(column_type, StructType):
+            # Process nested StructType column
+            struct_fields = [
+                F.when(F.col(f"{column_name}.{sub_field.name}").isNotNull(), F.col(f"{column_name}.{sub_field.name}"))
+                .alias(sub_field.name)
+                for sub_field in column_type.fields
+            ]
+            df = df.withColumn(column_name, F.struct(*struct_fields))
+
+        elif isinstance(column_type, ArrayType):
+            # Process ArrayType column
+            df = df.withColumn(column_name, F.expr(f"FILTER({column_name}, x -> x IS NOT NULL)"))
+
+        else:
+            # For other columns, replace null with None
+            df = df.withColumn(column_name, F.when(F.col(column_name).isNotNull(), F.col(column_name)))
+
+    return df
+
+# Load the original DataFrame (JSON structure) for demonstration
+json_rdd = exp_1.select("experianResponse").toJSON().map(lambda x: json.loads(x))
+
+# Clean the data recursively
+cleaned_rdd = json_rdd.map(lambda x: clean_structure(x))  # Use Python-based `clean_structure`
+cleaned_json_rdd = cleaned_rdd.map(lambda x: json.dumps(x))  # Convert back to JSON strings
+cleaned_df = spark.read.json(cleaned_json_rdd)  # Read the cleaned JSON strings into a DataFrame
+
+# Apply the remove_nulls_recursively function
+cleaned_final_df = remove_nulls_recursively(cleaned_df)
+
+# Replace the cleaned 'experianResponse' back in the original DataFrame
+final_df = exp_1.withColumn(
+    "experianResponse",
+    F.struct(*[F.col(f"experianResponse.{field.name}") for field in exp_1.schema["experianResponse"].dataType.fields])
+)
+
+# Display the schema and data of the final cleaned DataFrame
+final_df.printSchema()
+final_df.show(truncate=False)
