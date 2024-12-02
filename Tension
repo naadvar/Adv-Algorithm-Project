@@ -1,0 +1,45 @@
+I see the error - we need to fix the `expr` usage. Here's the corrected code:
+
+```python
+from pyspark.sql.functions import expr
+
+# First get the properly formatted JSON
+json_str = exp_3.select("experianResponse").first()[0]
+formatted_json = json.dumps(json.loads(json_str), indent=2)
+print("\nFormatted JSON:")
+print(formatted_json)
+
+# Create a new DataFrame with the formatted JSON
+formatted_df = spark.createDataFrame([(formatted_json,)], ["experianResponse"])
+
+# Alternative approach - if you want to keep it as a Spark DataFrame:
+from pyspark.sql.types import StringType
+formatted_df = exp_3.selectExpr(
+    "to_json(struct(*), 'pretty') as experianResponse"
+)
+
+# Show the result
+formatted_df.show(truncate=False, vertical=True)
+```
+
+Or if you want to parse it into a structured format:
+
+```python
+from pyspark.sql.functions import from_json, col, to_json
+
+# Get the schema from the data
+json_schema = spark.read.json(
+    sc.parallelize([json_str])
+).schema
+
+# Create formatted DataFrame
+formatted_df = exp_3.select(
+    to_json(
+        from_json(col("experianResponse"), json_schema)
+    ).alias("experianResponse")
+)
+
+formatted_df.show(truncate=False, vertical=True)
+```
+
+This should resolve the schema_of_json error and give you a properly formatted JSON output. Let me know if you need any adjustments!​​​​​​​​​​​​​​​​
