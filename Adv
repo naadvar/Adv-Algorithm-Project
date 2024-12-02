@@ -1,4 +1,40 @@
 I see the error - the corrupt_record is coming back as a list, not a string. Let's modify the code to handle this:
+To make it show up as a properly formatted JSON, you'll need to use `from_json` to parse it first, then format it back to a readable JSON. Here's how:
+
+```python
+from pyspark.sql.functions import to_json, struct, from_json, schema_of_json, col
+
+# First get the schema from your JSON string
+sample_json = exp_3.select("experianResponse").first()[0]
+json_schema = schema_of_json(sample_json)
+
+# Parse the JSON string to a struct, then back to formatted JSON
+formatted_df = exp_3.select(
+    from_json("experianResponse", json_schema).alias("parsed")
+).select(
+    to_json(col("parsed"), Map("pretty", "true")).alias("formatted_json")
+)
+
+# Show the result
+formatted_df.show(truncate=False)
+
+# Alternatively, to see it even more clearly:
+print(json.dumps(json.loads(formatted_df.first()[0]), indent=2))
+```
+
+Or if you want to work with the parsed data structure:
+
+```python
+# Parse and expand the JSON structure
+parsed_df = exp_3.select(
+    from_json("experianResponse", json_schema).alias("parsed")
+).select("parsed.*")
+
+# Show the expanded structure
+parsed_df.show(truncate=False)
+```
+
+The key is using `from_json` to parse the JSON string first, then either expanding it or reformatting it in a readable way. Let me know if you need any adjustments to the formatting!​​​​​​​​​​​​​​​​
 
 ```python
 # Get the corrupt record
