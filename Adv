@@ -25,6 +25,8 @@ Or alternatively, try this more robust approach:
 
 ```python
 # Get all corrupt records and handle them
+
+
 corrupt_records = df.select("_corrupt_record").collect()
 
 def clean_record(record):
@@ -39,9 +41,58 @@ def clean_record(record):
 cleaned_jsons = [clean_record(row[0]).replace('\n', '').replace('\\n', '').replace('  ', ' ').strip() 
                 for row in corrupt_records]
 
-# Create DataFrame from cleaned JSONs
+# Create DataFrame 
+
+
+from cleaned JSONs
 new_df = spark.read.option("multiLine", "true")\
     .json(sc.parallelize(cleaned_jsons))
 ```
 
-This should handle the case where the corrupt record is coming back as a list. Let me know if you're still seeing issues!​​​​​​​​​​​​​​​​
+This should 
+Ah, I see you're getting a JSONDecodeError with an invalid control character. This usually happens when there are hidden or special characters in the JSON string. Let's try to clean it first before parsing:
+
+```python
+# Clean the JSON string before parsing
+def clean_json_string(json_str):
+    # Remove any potential hidden characters and normalize whitespace
+    import re
+    # Remove any non-printable characters except valid whitespace
+    cleaned = ''.join(char for char in json_str if char.isprintable() or char in '\n\r\t')
+    # Normalize quotes (in case there are any fancy quotes)
+    cleaned = cleaned.replace('"', '"').replace('"', '"')
+    return cleaned
+
+# Your original JSON string
+newJson = '''{ your JSON string here }'''  # Your original JSON
+
+# Clean and parse
+cleaned_json = clean_json_string(newJson)
+parsed_json = json.loads(cleaned_json)
+clean_json_str = json.dumps(parsed_json)
+
+# Create DataFrame
+df = spark.read.json(sc.parallelize([clean_json_str]))
+```
+
+Or alternatively, you could try using the built-in string encode/decode to remove any problematic characters:
+
+```python
+# Alternative cleaning approach
+cleaned_json = newJson.encode('ascii', 'ignore').decode('ascii')
+parsed_json = json.loads(cleaned_json)
+clean_json_str = json.dumps(parsed_json)
+
+# Create DataFrame
+df = spark.read.json(sc.parallelize([clean_json_str]))
+```
+
+Can you try either of these approaches and let me know if you still get the error? Also, it might help to see what characters are actually in your string at that position. You can check with:
+
+```python
+# Print the problematic area
+problematic_index = 1936  # from your error message
+print(f"Characters around error position: {newJson[problematic_index-5:problematic_index+5]}")
+```​​​​​​​​​​​​​​​​
+
+the case where the corrupt record is coming back as a list. Let me know if you're still seeing issues!​​​​​​​​​​​​​​​​
