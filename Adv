@@ -154,3 +154,36 @@ print(f"Characters around error position: {newJson[problematic_index-5:problemat
 ```​​​​​​​​​​​​​​​​
 
 the case where the corrupt record is coming back as a list. Let me know if you're still seeing issues!​​​​​​​​​​​​​​​​
+
+That's expected behavior for PySpark DataFrames when reading nested JSON - it flattens the structure using dot notation. If you want to keep the nested structure, you can keep it as a struct type or you can select specific nested fields. Here are a few ways to work with it:
+
+```python
+# 1. To see the full schema structure
+df.printSchema()
+
+# 2. To select specific nested fields
+df.select(
+    "bureauErrorData",
+    "experianCreditBureau.completionCode",
+    "experianCreditBureau.products.customSolution.addressInformation.city"
+).show()
+
+# 3. To keep nested structure, select the parent column
+df.select("experianCreditBureau").show(truncate=False)
+
+# 4. If you need the whole thing as one JSON column, you can use to_json
+from pyspark.sql.functions import to_json, struct
+
+# Convert all columns back to a single JSON string column
+df_single_col = df.select(to_json(struct([df[x] for x in df.columns])).alias("json_data"))
+df_single_col.show(truncate=False)
+```
+
+Which format would you prefer to work with? 
+1. The flattened structure (current)
+2. Keep specific nested structures
+3. Everything in a single JSON column
+
+Let me know and I can help you structure it the way you need!​​​​​​​​​​​​​​​​
+
+
