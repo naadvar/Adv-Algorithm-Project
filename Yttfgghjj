@@ -1,0 +1,38 @@
+To combine all columns into a single Spark DataFrame with one JSON column named "experianResponse", you can use `to_json` with `struct` like this:
+
+```python
+from pyspark.sql.functions import to_json, struct
+
+# Combine all columns into a single JSON column
+exp_json = exp_1.select(
+    to_json(
+        struct(
+            "resubmitRequest",
+            "ruleValidation"
+        )
+    ).alias("experianResponse")
+)
+
+# Show the result
+exp_json.show(truncate=False)
+
+# If you want to see the schema
+exp_json.printSchema()
+```
+
+Or if you want to exclude any nulls in the output:
+
+```python
+# Version that excludes null values
+exp_json = exp_1.select(
+    to_json(
+        struct(
+            "resubmitRequest",
+            "ruleValidation"
+        ),
+        {"ignoreNullFields": "true"}
+    ).alias("experianResponse")
+)
+```
+
+This will give you a DataFrame with a single column named "experianResponse" containing all the data as a JSON string. Let me know if you need any adjustments to the output format!​​​​​​​​​​​​​​​​
