@@ -187,3 +187,30 @@ Which format would you prefer to work with?
 Let me know and I can help you structure it the way you need!​​​​​​​​​​​​​​​​
 
 
+
+Ah, you want to see the actual JSON structure. Let's try to convert it to a more readable JSON format:
+
+```python
+# First create the single column JSON
+from pyspark.sql.functions import to_json, struct, col
+
+# Convert to single JSON column and collect
+json_row = df.select(to_json(struct([df[x] for x in df.columns])).alias("json_data")).collect()[0][0]
+
+# Print the formatted JSON
+import json
+print(json.dumps(json.loads(json_row), indent=2))
+
+# If you want to save this back as a DataFrame with proper JSON structure:
+formatted_df = spark.createDataFrame([(json_row,)], ["json_data"])
+formatted_df.show(truncate=False)
+```
+
+Or if you want to write it out:
+```python
+# Write the formatted JSON to a file
+with open('formatted_data.json', 'w') as f:
+    json.dump(json.loads(json_row), f, indent=2)
+```
+
+Let me know if you want to see the data in a different format or need help accessing specific parts of the JSON structure!​​​​​​​​​​​​​​​​
