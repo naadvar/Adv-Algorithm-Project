@@ -63,6 +63,64 @@ def clean_json_string(json_str):
     cleaned = cleaned.replace('"', '"').replace('"', '"')
     return cleaned
 
+
+Let's try a more direct approach by just reading the raw JSON directly into a PySpark DataFrame, skipping Python's json parsing:
+
+```python
+# Create a DataFrame directly from the raw JSON string
+newJson = r'''{"bureauErrorData": null,
+    "bureauRawReportFeatureExecutionCode": "BureauEndStateInternalExecution",
+    "bureauResponseReceivedTime": {
+        "nanos": 343000000,
+        "seconds": 1730323800
+    },
+    "checksumMetadata": {
+        "checkSum": "d8f39d92f060452de22155dc209111af",
+        "dataLength": "256444"
+    },
+    "clientRequestIdName": "applicationId",
+    "clientRequestIdValue": "20000026884102",
+    "dataSourceName": "ExperianConsumerCreditBureau",
+    "experianCreditBureau": {
+        "completionCode": "0000",
+        "products": {
+            "businessProfile": [],
+            "checkPoint": [],
+            "collectionAdvantage": [],
+            "creditProfile": [],
+            "customSolution": [{
+                "addressInformation": [{
+                    "censusGeoCode": "",
+                    "city": "CENTENNIAL",
+                    "dwellingType": {
+                        "code": "S",
+                        "value": "Single-family dwelling"
+                    }
+                }]
+            }]
+        }
+    }
+}'''
+
+# Use raw string and create DataFrame directly
+df = spark.read\
+    .option("multiLine", "true")\
+    .option("mode", "PERMISSIVE")\
+    .option("allowUnquotedFieldNames", "true")\
+    .option("allowSingleQuotes", "true")\
+    .json(sc.parallelize([newJson]))
+
+# Check the result
+df.printSchema()
+df.show(truncate=False)
+```
+
+Key changes:
+1. Used a raw string (r''') to avoid any escape character issues
+2. Added more permissive options to the reader
+3. Bypassed Python's json parsing entirely
+
+Let me know if this works better!​​​​​​​​​​​​​​​​
 # Your original JSON string
 newJson = '''{ your JSON string here }'''  # Your original JSON
 
