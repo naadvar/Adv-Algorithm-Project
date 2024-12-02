@@ -214,3 +214,42 @@ with open('formatted_data.json', 'w') as f:
 ```
 
 Let me know if you want to see the data in a different format or need help accessing specific parts of the JSON structure!​​​​​​​​​​​​​​​​
+
+
+
+Let's try displaying it in different ways to see the actual JSON content:
+
+```python
+# Method 1: Use pandas to display
+formatted_df.toPandas()
+
+# Method 2: Force no truncation and vertical display
+formatted_df.show(truncate=False, vertical=True)
+
+# Method 3: Print the raw content
+print("Raw content:")
+for row in formatted_df.collect():
+    print(json.dumps(json.loads(row.json_data), indent=2))
+
+# Method 4: Register as temp view and use SQL
+formatted_df.createOrReplaceTempView("json_view")
+spark.sql("SELECT * FROM json_view").show(truncate=False)
+
+# Method 5: Save and read back
+# formatted_df.write.json("temp_json")
+```
+
+Could you try these different display methods and let me know which one shows the data in a way that works for you? Often the vertical=True option or the pandas conversion makes it easier to see the full content without truncation.
+
+Also, if you just want to verify the content is correct, you could select specific fields:
+```python
+# Parse the JSON column back into structured fields
+from pyspark.sql.functions import from_json, schema_of_json
+
+# Get schema from your data
+json_schema = schema_of_json(formatted_df.select('json_data').first()[0])
+
+# Parse JSON with schema
+parsed_df = formatted_df.select(from_json('json_data', json_schema).alias('parsed_data'))
+parsed_df.select('parsed_data.*').show(truncate=False)
+```​​​​​​​​​​​​​​​​
