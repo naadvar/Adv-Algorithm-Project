@@ -1,0 +1,53 @@
+250 west 50 th street, apartment 40 E, New York  , New York 10019
+
+from pyspark.sql import functions as F
+import pandas as pd
+
+# Paths and dates (from your provided code)
+dates = [f"{year}-{month:02d}-{day:02d}" for year in [2024] for month in [10] for day in range(1, 32)]
+XDS_EXP_PATH = "s3://your-data-path/"
+
+# Initialize a list to store processed data
+processed_data = []
+
+# Function to clean rows (adapted from your code)
+def clean_spark_row(data):
+    if isinstance(data, dict):
+        return {k: v for k, v in data.items() if v is not None and v != "" and v != []}
+    return data
+
+# Outer loop: iterate over each day
+for day in dates:
+    try:
+        # Step 1: Read data for the current day
+        daily_df = spark.read.format("com.databricks.spark.avro").load(f"{XDS_EXP_PATH}{day}")
+        
+        # Step 2: Get unique hour-minute combinations for the day
+        hour_minute_combinations = (
+            daily_df.select("hour", "minute").distinct().collect()
+        )
+
+        # Inner loop: iterate over hour-minute combinations
+        for combination in hour_minute_combinations:
+            hour, minute = combination["hour"], combination["minute"]
+            
+            # Step 3: Filter data for the current hour-minute combination
+            filtered_df = daily_df.filter((F.col("hour") == hour) & (F.col("minute") == minute))
+            
+            # Step 4: Convert filtered data to Pandas DataFrame
+            pandas_df = filtered_df.toPandas()
+            
+            # Step 5: Extract and clean required fields
+            for _, row in pandas_df.iterrows():
+                attr_dict = clean_spark_row(row.get("attr_dict", {}))  # Replace with actual column name
+                processed_data.append({"day": day, "hour": hour, "minute": minute, "attr_dict": attr_dict})
+    
+    except Exception as e:
+        print(f"Error processing data for day {day}: {e}")
+        continue
+
+# Step 6: Convert processed data to a Pandas DataFrame
+result_df = pd.DataFrame(processed_data)
+
+# Step 7: Optionally, convert back to Spark DataFrame if needed
+result_spark_df = spark.createDataFrame(result_df)
