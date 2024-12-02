@@ -1,0 +1,38 @@
+Try showing it vertically and without truncation, which should make it more readable. Also, we can parse and format it properly:
+
+```python
+# First, show it vertically
+exp_3.show(truncate=False, vertical=True)
+
+# To get a properly formatted JSON display:
+import json
+from pyspark.sql.functions import col
+
+# Get the JSON string and format it
+json_str = exp_3.select("experianResponse").first()[0]
+formatted_json = json.dumps(json.loads(json_str), indent=2)
+print("\nFormatted JSON:")
+print(formatted_json)
+
+# If you want to actually store it back as a formatted DataFrame:
+formatted_df = exp_3.select(
+    expr("from_json(experianResponse, schema_of_json(experianResponse))").alias("parsed")
+).select("parsed.*")
+
+# Show the parsed structure
+formatted_df.show(truncate=False, vertical=True)
+```
+
+Or if you specifically want to see it in the DataFrame output with formatting:
+
+```python
+formatted_df = spark.createDataFrame(
+    [(formatted_json,)],
+    ["experianResponse"]
+)
+
+# Show with vertical=True to see the full formatted structure
+formatted_df.show(vertical=True, truncate=False)
+```
+
+The key is using `vertical=True` in the show() method and ensuring we're not truncating the output. Let me know if this helps make it more readable!​​​​​​​​​​​​​​​​
