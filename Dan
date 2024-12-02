@@ -1,0 +1,26 @@
+I see the error - you can't directly display a dictionary with display(). Let's convert the formatted JSON back to a Spark DataFrame:
+
+```python
+# First format the JSON
+for row in rows:
+    json_content = json.loads(row.experianResponse)
+    formatted_json = json.dumps(json_content, indent=4)
+
+# Create a new DataFrame with the formatted JSON
+formatted_df = spark.createDataFrame([(formatted_json,)], ["experianResponse"])
+
+# Show the formatted result
+formatted_df.show(truncate=False, vertical=True)
+
+# Or if you just want to print it:
+print(formatted_json)
+```
+
+Or if you want to keep working with the structured data:
+```python
+# Convert back to Spark DataFrame
+formatted_df = spark.createDataFrame([json_content])
+formatted_df.show(truncate=False, vertical=True)
+```
+
+The key is to either print the formatted JSON string directly or convert it back to a Spark DataFrame before displaying. Let me know if this works better!​​​​​​​​​​​​​​​​
