@@ -1,0 +1,37 @@
+Let's try a simpler approach to get a nicely formatted display:
+
+```python
+# First get all rows as a list
+rows = exp_3.collect()
+
+# Print each row's JSON content with proper formatting
+for row in rows:
+    json_content = json.loads(row.experianResponse)
+    print(json.dumps(json_content, indent=4))
+```
+
+Or if you want to store it back as a DataFrame but with readable formatting:
+
+```python
+# Get the JSON string and format it
+row = exp_3.first()
+json_content = json.loads(row.experianResponse)
+formatted_json = json.dumps(json_content, indent=4)
+
+# Create new DataFrame with formatted JSON
+formatted_df = spark.createDataFrame([(formatted_json,)], ["experianResponse"])
+
+# Show vertically to preserve formatting
+formatted_df.show(vertical=True, truncate=False)
+```
+
+If you're using a notebook, you could also try:
+```python
+from IPython.display import display, JSON
+
+# Display JSON in notebook
+json_content = json.loads(exp_3.first().experianResponse)
+display(JSON(json_content))
+```
+
+Let me know if any of these approaches gives you the readable format you're looking for!​​​​​​​​​​​​​​​​
