@@ -1,0 +1,33 @@
+Ah sorry, let me correct that. In PySpark, we need to use a Python dictionary for options instead of Map:
+
+```python
+from pyspark.sql.functions import to_json, struct, from_json, schema_of_json, col
+
+# First get the schema from your JSON string
+sample_json = exp_3.select("experianResponse").first()[0]
+json_schema = schema_of_json(sample_json)
+
+# Parse the JSON string to a struct, then back to formatted JSON
+formatted_df = exp_3.select(
+    from_json("experianResponse", json_schema).alias("parsed")
+).select(
+    to_json(col("parsed"), {"pretty": "true"}).alias("formatted_json")
+)
+
+# Show the result
+formatted_df.show(truncate=False)
+
+# For even clearer viewing, print it:
+print(json.dumps(json.loads(formatted_df.first()[0]), indent=2))
+```
+
+If you're still not seeing it formatted clearly, you can also try:
+
+```python
+# Alternative approach using Python's json module
+json_str = exp_3.select("experianResponse").first()[0]
+formatted_json = json.dumps(json.loads(json_str), indent=2)
+print(formatted_json)
+```
+
+Let me know if this works better!​​​​​​​​​​​​​​​​
