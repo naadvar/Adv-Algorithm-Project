@@ -1,0 +1,47 @@
+I see the error - the corrupt_record is coming back as a list, not a string. Let's modify the code to handle this:
+
+```python
+# Get the corrupt record
+corrupt_records = df.select("_corrupt_record").collect()
+corrupt_record = corrupt_records[0][0]  # Get the string from the Row object
+
+# Now clean it - make sure we're working with a string
+if isinstance(corrupt_record, str):
+    cleaned_json = corrupt_record.replace('\n', '').replace('\\n', '').replace('  ', ' ').strip()
+    
+    # Create new DataFrame from cleaned JSON
+    new_df = spark.read.option("multiLine", "true")\
+        .json(sc.parallelize([cleaned_json]))
+else:
+    print(f"Corrupt record is not a string, it's a {type(corrupt_record)}")
+    # If it's a list, join the elements
+    if isinstance(corrupt_record, list):
+        cleaned_json = ' '.join(corrupt_record).replace('\n', '').replace('\\n', '').replace('  ', ' ').strip()
+        new_df = spark.read.option("multiLine", "true")\
+            .json(sc.parallelize([cleaned_json]))
+```
+
+Or alternatively, try this more robust approach:
+
+```python
+# Get all corrupt records and handle them
+corrupt_records = df.select("_corrupt_record").collect()
+
+def clean_record(record):
+    if isinstance(record, list):
+        return ' '.join(str(x) for x in record)
+    elif isinstance(record, str):
+        return record
+    else:
+        return str(record)
+
+# Clean each record
+cleaned_jsons = [clean_record(row[0]).replace('\n', '').replace('\\n', '').replace('  ', ' ').strip() 
+                for row in corrupt_records]
+
+# Create DataFrame from cleaned JSONs
+new_df = spark.read.option("multiLine", "true")\
+    .json(sc.parallelize(cleaned_jsons))
+```
+
+This should handle the case where the corrupt record is coming back as a list. Let me know if you're still seeing issues!​​​​​​​​​​​​​​​​
