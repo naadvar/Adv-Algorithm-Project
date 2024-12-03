@@ -1,0 +1,70 @@
+import pandas as pd
+import json
+
+# Example DataFrame with a dictionary column
+df = pd.DataFrame({
+    "id": [1, 2],
+    "data": [{"key1": "value1", "key2": "value2"}, {"key3": "value3", "key4": "value4"}]
+})
+
+# Serialize the dictionary to a JSON string
+df["data"] = df["data"].apply(json.dumps)
+
+# Write to Snowflake
+from snowflake.connector.pandas_tools import write_pandas
+from snowflake.connector import connect
+
+conn_params = {
+    "user": "YOUR_USERNAME",
+    "password": "YOUR_PASSWORD",
+    "account": "YOUR_ACCOUNT",
+    "warehouse": "YOUR_WAREHOUSE",
+    "database": "YOUR_DATABASE",
+    "schema": "YOUR_SCHEMA"
+}
+
+with connect(**conn_params) as conn:
+    write_pandas(conn, df, table_name="YOUR_TABLE_NAME")
+
+
+# Example DataFrame with a dictionary column
+df = pd.DataFrame({
+    "id": [1, 2],
+    "data": [{"key1": "value1", "key2": "value2"}, {"key3": "value3", "key4": "value4"}]
+})
+
+# Flatten the dictionary column into separate columns
+data_flattened = pd.json_normalize(df["data"])
+df = pd.concat([df.drop(columns=["data"]), data_flattened], axis=1)
+
+# Write to Snowflake
+with connect(**conn_params) as conn:
+    write_pandas(conn, df, table_name="YOUR_TABLE_NAME")
+
+
+
+
+
+from sqlalchemy import create_engine
+import pandas as pd
+import json
+
+# Example DataFrame with a dictionary column
+df = pd.DataFrame({
+    "id": [1, 2],
+    "data": [{"key1": "value1", "key2": "value2"}, {"key3": "value3", "key4": "value4"}]
+})
+
+# Serialize dictionary column to JSON string
+df["data"] = df["data"].apply(json.dumps)
+
+# Create a Snowflake SQLAlchemy engine
+engine = create_engine(
+    "snowflake://YOUR_USERNAME:YOUR_PASSWORD@YOUR_ACCOUNT/YOUR_DATABASE/YOUR_SCHEMA?warehouse=YOUR_WAREHOUSE"
+)
+
+# Create the table with a VARIANT column
+engine.execute("CREATE TABLE IF NOT EXISTS YOUR_TABLE_NAME (id INT, data VARIANT)")
+
+# Write to Snowflake
+df.to_sql("YOUR_TABLE_NAME", engine, index=False, if_exists="append")
